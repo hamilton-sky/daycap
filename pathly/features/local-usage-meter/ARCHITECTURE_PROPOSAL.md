@@ -261,7 +261,7 @@ Normalization rules (these are the accuracy contract):
 | Source field | Rule |
 |---|---|
 | Claude `message.usage.input_tokens` | → `inputUncached` **as-is**. Anthropic already excludes cache reads. Do **not** subtract. |
-| Claude `cache_creation_input_tokens` | → `cacheWrite5m` **unless** `message.usage.cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}` is present, in which case use that split. |
+| Claude `cache_creation_input_tokens` | → **always** read the split from `message.usage.cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}`, which real logs carry on **100%** of turns (verified 2026-08-24, 1,772/1,772). The `cacheWrite5m` fallback is a defensive path for older logs, not the normal case. |
 | Claude `cache_read_input_tokens` | → `cacheRead` |
 | Claude `output_tokens` | → `output` (reasoning already inside) |
 | Codex `input_tokens` | → `inputUncached = input_tokens − cached_input_tokens`. **OpenAI counts cached inside input.** Clamp at 0. |
@@ -270,9 +270,28 @@ Normalization rules (these are the accuracy contract):
 | Codex `output_tokens` | → `output` |
 | Codex `reasoning_output_tokens` | → `reasoning` only. **Never added to `output`** — it is a subset. |
 
-> Both "already includes" claims are the classic double-count traps. They are flagged as
-> `VERIFY-01` / `VERIFY-02` in §10 and must be asserted against the real sample logs before Phase 1
-> is accepted, with a golden-file test pinning the expected totals.
+> **✅ VERIFIED against a real log, 2026-08-24** (`fixtures/claude-session-scrubbed.jsonl`,
+> drawn from a 3,683-line Claude Code session). Measurements, deduped on
+> `(message.id, requestId)`:
+>
+> | Quantity | Measured | Consequence |
+> |---|---:|---|
+> | max `input_tokens` | **2** | `input_tokens` excludes cache reads — confirmed, do not subtract |
+> | max `cache_read_input_tokens` | **992,185** | cache read is ~99.9% of all input volume |
+> | `ephemeral_1h_input_tokens` | **3,713,390 (100%)** | **all** cache writes were 1-hour |
+> | `ephemeral_5m_input_tokens` | **0 (0%)** | the 5m default assumed by ADR-006 never fired |
+> | turns carrying `cache_creation` | **1,772 / 1,772** | the TTL split is always available |
+> | naive vs deduped totals | **905.9M vs 375.7M** | **2.41× inflation** without dedup |
+>
+> Two design consequences, both corrections to what this document previously assumed:
+> 1. **Price cache writes from the TTL split, never from a flat default.** Assuming 1.25× on this
+>    workload understates the cache-write line by **37.5%**. See ADR-006.
+> 2. **`usage` also carries an `iterations[]` array**, each entry repeating the same shape
+>    (including its own `cache_creation`). It is a per-iteration breakdown of the same turn —
+>    **never sum it into the turn totals**; that is a third double-count trap this document did
+>    not anticipate.
+>
+> `VERIFY-02` (Codex) remains unverified — no Codex log has been supplied.
 
 ### 3.2 `TurnRecord`
 
@@ -801,9 +820,16 @@ onward** (network-stubbed test suite).
   are directional: Anthropic's `input_tokens` *excludes* cache reads while OpenAI's *includes* them,
   and OpenAI's `output_tokens` *includes* reasoning. Handling these anywhere other than one
   normalization boundary guarantees they get re-broken later. Defaulting unknown cache writes to
-  1.25× under-states rather than over-states cost — the honest direction for a budget tool is to be
-  conservative *about the user's remaining budget*, but here 1.25× is also simply the common case
-  (Claude Code's default cache TTL is 5 minutes).
+  1.25× under-states rather than over-states cost.
+
+  > **⚠ CORRECTED 2026-08-24.** The parenthetical here used to read "1.25× is also simply the
+  > common case (Claude Code's default cache TTL is 5 minutes)". **The real logs say otherwise:
+  > 100% of cache-creation tokens across 1,772 measured turns were `ephemeral_1h` (2×), and
+  > `ephemeral_5m` was exactly 0.** The split is present on every turn, so the fallback should
+  > essentially never fire — and when it does, defaulting to 1.25× understates by 37.5% on a
+  > workload shaped like this one. **Always read the split.** Treat a missing `cache_creation`
+  > object as the anomaly it is: count it, surface it in `lum doctor`, and default to **2×**
+  > (the observed reality), not 1.25×.
 - **Rejected.** *Four fields exactly as the PO listed* (cannot represent the 1.25×/2× split the PO
   themselves named, and cannot show reasoning in the breakdown). *Carrying raw provider shapes into
   the domain* (pushes CLI-specific traps into pricing and aggregation).
@@ -879,10 +905,10 @@ a hard one for anything that claims to be correct.
 
 | # | Prerequisite | Owner | Blocks | Status |
 |---|---|---|---|---|
-| **PRE-1** | **One real, scrubbed Claude Code log**: `~/.claude/projects/<proj>/<session>.jsonl`. Keep `message.id`, `requestId`, `message.model`, `message.usage.*`, `timestamp`, `type`; replace all text content with `"[scrubbed]"`. Must include at least one cache hit (`cache_read_input_tokens > 0`). | Human | `46e3230b` golden tests only | **PENDING** — supply before step 2b |
+| **PRE-1** | ✅ **SUPPLIED 2026-08-24** — `fixtures/claude-session-scrubbed.jsonl` (88 lines, 30 unique turns, 58 natural duplicates, whitelist-scrubbed). ~~One real, scrubbed Claude Code log~~: `~/.claude/projects/<proj>/<session>.jsonl`. Keep `message.id`, `requestId`, `message.model`, `message.usage.*`, `timestamp`, `type`; replace all text content with `"[scrubbed]"`. Must include at least one cache hit (`cache_read_input_tokens > 0`). | Human | — | **DONE** |
 | **PRE-2** | ~~Scrubbed Codex log~~ | — | — | **RESOLVED** — ARCH_QUESTION 2 closed; Codex reader uses documented schema + defensive normalization + provisional marking in `lum doctor` |
-| **PRE-3** | **Duplicated-session Claude fixture** (same `message.id` in two `.jsonl` files) | Builder | P1 dedup test | **Builder-generated** — synthesize from PRE-1 by copying one line into a second file |
-| **PRE-4** | **`VERIFY-01`** — from PRE-1, confirm Claude `input_tokens` excludes `cache_read_input_tokens`; confirm 5m/1h cache creation split presence | Builder | `46e3230b` golden tests | **PENDING** — cannot be confirmed before PRE-1 supplies the log it reads. Previously marked "Confirmed via real log" while PRE-1 was still outstanding; no such log was ever supplied. |
+| **PRE-3** | **Duplicated-session Claude fixture** | Builder | P1 dedup test | ✅ **SATISFIED BY PRE-1** — no synthesis needed. The real log repeats `message.id` naturally: 88 lines carry 30 unique ids. Measured inflation if dedup is skipped: **2.41×** (905,933,429 → 375,702,303 tokens over the full source session). |
+| **PRE-4** | **`VERIFY-01`** | Builder | `46e3230b` golden tests | ✅ **CONFIRMED against the real log, 2026-08-24.** (a) `input_tokens` **excludes** cache reads — across 1,772 assistant turns the maximum `input_tokens` is **2** while the maximum `cache_read_input_tokens` is **992,185**. Use as-is; do **not** subtract. (b) The 5m/1h split **is** present, on 100% of turns, as `usage.cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}`. See §3.1. |
 | **PRE-5** | ~~`VERIFY-02`~~ — Codex token semantics | — | — | **RESOLVED** — handled by unconditional defensive normalization: `inputUncached = input_tokens − cached_input_tokens`; consume `last_token_usage` never `total_token_usage` sum |
 | **PRE-6** | **`VERIFY-03`** — Claude Code `statusLine` hook contract (settings key, stdin schema, refresh cadence) | Builder | P3 only | **PARTIALLY CONFIRMED** — RESEARCH.md §3 has the full stdin schema; `process.stdin.destroy()` pattern recommended |
 | **PRE-7** | **`VERIFY-04` (simplified)** — confirm `ccusage daily --json --offline` output schema; confirm ccusage version for README | Builder | `415dc77e` reconciler | Simpler now: no subpath exports to find |
