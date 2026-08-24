@@ -14,6 +14,15 @@
 > with no `today` label and no progress bar, which the brief and §6.3 both specify; and it
 > defined stale and latch behaviour opposite to §6.3 and ADR-008. **Where this file and the
 > architecture disagree, the architecture wins.** The conflicts are corrected inline below.
+>
+> **Updated 2026-08-24 for v2 surfaces.** Four component specs are new — §5 rate-limit-primary
+> statusline, §6 pacing indicator, §7 the five-state degraded/no-source taxonomy, and §8 the
+> `lum today` per-tool table — none of which existed when this file was first generated. The
+> original §1 stale/no-daemon/unknown-model markers, §2's TUI stale row, and the `lum doctor`
+> example in §4 are corrected in place: "stale" now means the **collector** is behind, not a
+> daemon of ours (we have none — ARCHITECTURE_PROPOSAL.md, "Why there is a v2"), and `lum doctor`
+> no longer talks about "session files indexed." Palette, ANSI codes, threshold colours,
+> accessibility rules and notification copy below are unchanged and still authoritative.
 
 ## Query
 Local AI spend statusline meter — terminal UI showing today's spend vs daily budget with threshold alerts, computed from local logs
@@ -43,7 +52,9 @@ Both design passes converged on the same typography anchor (**JetBrains Mono**) 
 
 > **Terminal rendering note:** All colors are expressed as ANSI 8-bit (256-color) values for
 > the statusline script and as full RGB escape codes for the TUI. Always provide a fallback
-> 16-color path: green→`\e[32m`, amber→`\e[33m`, red→`\e[31m`, reset→`\e[0m`.
+> 16-color path: green→`\e[32m`, amber→`\e[33m`, red→`\e[31m`, reset→`\e[0m`. **Muted (§6/§7,
+> new in v2)** has no reliable 16-color grey — its fallback is dim (`\e[2m`) on default foreground,
+> not a colour substitution.
 
 #### Typography
 
@@ -58,8 +69,9 @@ Both design passes converged on the same typography anchor (**JetBrains Mono**) 
 
 #### 1. Statusline String (hot path — `statusline.js`)
 
-The statusline script must complete in < 30 ms. It reads `~/.localusagemeter/state/today.json`
-atomically and prints a single fixed-width string. Never parse a log file here.
+The statusline script must complete in < 30 ms. It reads a small cache file that `lum` refreshes
+from the collector (`ARCHITECTURE_PROPOSAL.md` §6) — never a log, never computed here. This is
+the **USD-primary** form; see §5 for the rate-limit-primary form subscription accounts default to.
 
 **Format templates:**
 
@@ -73,22 +85,27 @@ green  (<80%)   today $3.20 / $10.00 (32%) ▓▓░░░
 amber  (>=80%)  today $8.40 / $10.00 (84%) ▓▓▓▓░
 red    (>=100%) today $11.90 / $10.00 (119%) ▓▓▓▓▓
 imputed         today ≈$3.20 / $10.00 (32%) ▓▓░░░
-stale > 60 s    today $3.20 / $10.00 (32%) ▓▓░░░ ⋯     ← last known value + age marker
-no daemon       today $3.20 / $10.00 (32%) ▓▓░░░ (paused)
-unknown model   today $3.20 / $10.00 (32%) ▓▓░░░ ?
-cold / no data  lum —
 ```
+
+> **Corrected for v2 — see §7 below.** The four degraded rows that used to appear here (`stale`,
+> `no daemon`, `unknown model`, `cold / no data`) described v1's own resident daemon and its
+> log-derived model/pricing table. v2 has neither (no daemon of our own; pricing and model
+> resolution are the collector's job behind `UsageSourcePort`). §7 replaces all four with a
+> five-state collector-trust taxonomy and is now the authoritative list — do not reintroduce
+> `(paused)` or `?` elsewhere in this file.
 
 **ANSI escape template (256-color):**
 
 ```
 \e[38;5;<COLOR_CODE>mtoday <SYMBOL>$<SPEND> / $<BUDGET> (<PCT>%) <BAR>\e[0m<SUFFIX>
 ```
-`<BAR>` is `display.barWidth` cells (default 5) of `▓`/`░`. `<SUFFIX>` is the uncoloured state
-marker — `⋯` stale, `(paused)` no daemon, `?` unknown model — appended outside the reset so it
-never inherits the threshold colour.
+`<BAR>` is `display.barWidth` cells (default 5) of `▓`/`░`. `<SUFFIX>` is the state marker
+defined in §7 (new in v2) — `*` partial coverage, `⋯` stale, `(source down)`, or nothing at all
+for full-coverage/fresh data — appended outside the reset so it never inherits the threshold
+colour. **Corrected for v2:** `(paused)` (our own daemon, pre-v2) and `?` (unknown model,
+pre-v2) are retired; see the callout above.
 
-Where `<COLOR_CODE>` is 77 (green), 208 (amber), 203 (red), or 246 (muted/stale).
+Where `<COLOR_CODE>` is 77 (green), 208 (amber), 203 (red), or 246 (muted/stale/degraded).
 
 **Statusline width budget:** no hard cap — the statusline owns its row. Keep it under ~40 chars
 so it coexists with other segments; degrade by dropping the bar first, then the budget figure.
@@ -134,7 +151,7 @@ layout below is a fixed-width composition, not a flex tree.
 | Normal `< 80%` | `#22C55E` (ANSI 77) | white | muted |
 | Warning `80–99%` | `#F97316` (ANSI 208) | amber bold | amber |
 | Over `≥ 100%` | `#EF4444` (ANSI 203) | red bold | red |
-| Stale `> 60s` | `#475569` (ANSI 59) | last value + `⋯` | muted |
+| Stale (collector freshness > 120s — **corrected for v2**, see §7) | `#475569` (ANSI 59) | last value + `⋯` | muted |
 
 #### 3. Notification (OS-level alert)
 
@@ -156,41 +173,315 @@ stream of notifications.
 ADR-008 rejects it as unmaintained and binary-bundling, and the underlying commands are three
 one-liners. No sound. No icon asset — the platform notifier supplies its own.
 
+**Pacing and rate-limit windows do not add new notification types.** §5 and §6 (new in v2) are
+informational render-only additions; the latch in `app/latch.ts` still fires only on the primary
+signal's 0.8/1.0 crossings — rate-limit percentage when that's primary, USD otherwise — exactly
+as specified above. A user past 80% on the 7d window while under 80% on 5h gets exactly one
+notification, driven by whichever number is closer to its own ceiling (§5's "higher wins" rule),
+never two separate alerts for the same underlying budget.
+
 #### 4. `lum doctor` Diagnostic Output
 
 Plain-text table. No color unless `--color` flag explicitly passed. Width: 80 cols.
 
+> **Corrected for v2.** The block below used to read `daemon ✓ running (pid 91234)` and
+> `claude ✓ 4 session files indexed` — both describe v1's own resident daemon and its own log
+> tailing. v2 has neither: `lum doctor` now reports on the **collector** behind `UsageSourcePort`
+> — which source it found, how fresh its data is, and which configured tools it has actually
+> seen — instead of anything computed from a log. See §7 for the trust-state vocabulary this
+> output surfaces.
+
 ```
 lum doctor
-  daemon    ✓ running (pid 91234)
-  snapshot  ✓ fresh (2s ago)
-  claude    ✓ 4 session files indexed
-  codex     ⚠ provisional — no real session log seen yet
-  budget    ✓ $10.00/day configured
-  spend     ≈$3.20 today (32%)
+  source     ✓ budi (daemon reachable, 127.0.0.1:7878)
+  freshness  ✓ updated 4s ago
+  tools      ✓ claude-code, codex        ⚠ cursor (not seen this usage-day)
+  primary    rate-limit (5h/7d present on stdin)
+  budget     ✓ $10.00/day configured
+  spend      ≈$3.20 today (32%)
 ```
+
+#### 5. Rate-Limit-Primary Statusline (subscription accounts, the default case) — **NEW in v2**
+
+When `primarySignal` resolves to `rate-limit` (ADR-v2-003 — Claude Code's stdin carries
+`rate_limits` for this session), the 5h and 7d rate-limit windows lead the line; the imputed
+dollar figure moves to a secondary, muted, trailing position.
+
+**Format templates — one-present, both-present, both-absent:**
+
+```
+both present     5h 23% · 7d 41% ▓▓░░░  ≈$3.20 today
+5h only          5h 23% ▓▓░░░  ≈$3.20 today
+7d only          7d 41% ▓▓▓░░  ≈$3.20 today
+neither present  today $3.20 / $10.00 (32%) ▓▓░░░        ← falls back to §1's USD-primary form
+```
+
+`rate_limits.five_hour` and `rate_limits.seven_day` are each independently optional per the
+official `// empty` handling (`RESEARCH.md` §3). **Never render a placeholder for an absent
+window** — `5h 23% · 7d —%` invents a number where there is none; drop the segment and the ` · `
+separator entirely instead. When both are absent, `primarySignal: auto` has already resolved to
+`usd` per `ARCHITECTURE_PROPOSAL.md` §4 — that is not a degraded state, it is the correct render
+for an API-key account, and it reuses §1's format unchanged.
+
+**Design decision — which window drives colour and the bar when 5h and 7d disagree:**
+
+> **The higher of the two percentages drives the bar colour and the notification/latch state.**
+> Each window's own number keeps its own colour — 23% and 41% are each coloured against the
+> 0.8/1.0 thresholds independently, so the pair is self-describing on its own — but the single
+> shared bar, and whatever fraction feeds `budget.ts`'s `evaluate()` for the notification latch,
+> use `max(five_hour.used_percentage, seven_day.used_percentage)`.
+>
+> **Why:** the two windows are independent caps — crossing *either* one blocks you. The window
+> closer to its own ceiling is the one that will actually stop you working next, regardless of
+> which window that happens to be. Picking a fixed window (always 5h, or always 7d) would
+> silently hide the other window's red state behind a green bar exactly when it matters most.
+> This is the same "worst state wins" rule the threshold latch already applies to `crossed[]`
+> within one window — extended across two parallel windows instead of one.
+
+**Field formatting:**
+- `5h`/`7d` labels: fixed 2-char literal, no colour.
+- Percentage: right-aligned to 3 characters before `%`, matching §1's `PCT` field —
+  `" 23%"`, `"114%"`. Rate limits round to a whole percent upstream; do not add decimal
+  precision the source doesn't have.
+- Separator: ` · ` (U+00B7, middle dot) between windows when both are present.
+- The `≈$3.20 today` suffix keeps its existing muted colour and `≈` marker (Colors table,
+  "Muted value") unchanged — only its position changed (now trailing, not leading).
+
+**Width and degrade order — this differs from §1's own order:**
+
+The two-window line runs ~30–36 chars before the dollar suffix, which the USD-primary form
+does not carry at all. Under `primarySignal: rate-limit`, drop in this order when the row would
+overflow the ~40-char budget:
+1. `≈$3.20 today` — drop first. It is explicitly secondary under ADR-v2-003; the rate-limit
+   percentages are the whole point of this mode.
+2. The bar (`▓▓░░░`) — drop second, same as §1.
+3. Never drop a present percentage window. If only one window fits, that is the both-present
+   case degrading toward the one-window case, not truncation of a number.
+
+This inverts §1's own order (there, the budget figure is the thing being protected, and the
+`≈` marker was never dropped) precisely because primacy has flipped: on this account type the
+percentage is primary and the dollar figure is the one allowed to go.
+
+#### 6. Pacing Indicator — **NEW in v2**
+
+Compares the fraction of the primary signal already used against the fraction of its window
+already elapsed. `pacing.ts` computes `expected = elapsedFraction(window)`,
+`actual = usedFraction(window)`, `delta = actual − expected`.
+
+**Assumption (not resolved by the architecture — stated here, not decided elsewhere):** pacing
+attaches to whichever signal is currently primary. On a rate-limit-primary line it paces the
+*more urgent* window — the one already driving the bar colour per §5's "higher wins" rule —
+against elapsed time in that window; on a USD-primary line it paces spend against elapsed time
+in the usage day (`window.ts`'s `usageDayFor`, `ARCHITECTURE_PROPOSAL.md` §2). If this reading
+is wrong, it is a one-line change to `pacing.ts`'s input, not a rendering change — the glyph and
+thresholds below hold either way.
+
+**Format:**
+
+```
+ahead    today $6.40 / $10.00 (64%) ▓▓▓░░ ↑ ahead of pace
+behind   today $2.10 / $10.00 (21%) ▓▓░░░ ↓ behind pace
+on pace  today $4.80 / $10.00 (48%) ▓▓▓░░              ← nothing rendered, not even a neutral glyph
+```
+
+**Semantics.** "Ahead of pace" means burn rate exceeds elapsed-time share — you are on track to
+cross the window's ceiling before it resets. That is a caution, not praise, despite the upward
+arrow: `↑` reads as "your line is rising faster than the clock," not "good job." "Behind pace"
+means the opposite — comfortably on track to finish the window under the line.
+
+**Suppression — when it renders nothing (the noise case the brief calls out):**
+
+| Condition | Rule |
+|---|---|
+| `elapsedFraction(window) < 0.15` | Suppress unconditionally. Early in a 5h or 24h window, one large session reads as "wildly ahead of pace" purely because the denominator (elapsed time) is still tiny — the ratio is not yet meaningful. **Threshold: 15% of the window elapsed.** |
+| `abs(delta) < 0.05` | Suppress. Within 5 percentage points of on-pace is on-pace; do not manufacture a signal from noise. |
+| Primary signal degraded (§7 — stale, source down, no source) | Suppress. Pacing needs a trustworthy `actual`; a degraded reading must not also imply a pacing verdict. |
+| `pacing: false` in config | Suppress. Config already supports this (`ARCHITECTURE_PROPOSAL.md` §4). |
+
+Both thresholds (15% elapsed, 5pp deadzone) are **conservative defaults, not measured** — flag
+for revisit once real burn-rate data exists; P2's exit criteria (`ARCHITECTURE_PROPOSAL.md` §7)
+is the natural checkpoint. If they prove too aggressive or too lax, this is a constant change in
+`domain/pacing.ts`, not a rendering change.
+
+**Colour: always muted, never threshold-coloured.** The pacing marker uses the existing "Muted
+value" role (`#94A3B8` / ANSI 246; 16-color fallback: dim `\e[2m`, reset `\e[0m`) regardless of
+ahead/behind. It never reuses green/amber/red. Two reasons: (1) the glyph (`↑`/`↓`) plus the
+word already carries the meaning without colour — satisfies "colour is never the only signal" at
+no extra cost; (2) threshold colour is reserved for "how much of the ceiling is used," which
+pacing is not — overloading a third meaning onto the same three hues would make the whole line
+harder to read at a glance, defeating the point of a statusline.
+
+**Width and degrade order:** pacing is the *first* thing dropped under width pressure — it is
+the newest and most supplementary signal on the line, dropped before `≈$… today` (§5) and before
+the bar (§1/§5). Compact fallback when space allows the glyph but not the word: `↑` / `↓` alone,
+still muted, still governed by the same suppression rules above.
+
+#### 7. Degraded and No-Source States — **NEW in v2, replaces the v1 markers referenced above**
+
+> **Correction.** Everywhere above this section that still says "stale," "no daemon," or
+> "unknown model" describes v1, where *our own* daemon computed the number from logs it tailed.
+> v2 has no daemon and parses no logs (`ARCHITECTURE_PROPOSAL.md`, "Why there is a v2"). Every
+> number on the statusline now originates from a collector behind `UsageSourcePort`, so every
+> degraded state is a statement about **the collector's** availability and freshness, never
+> ours. The `(paused)` marker and the `?` unknown-model marker are retired: there is no daemon of
+> ours to pause, and pricing/model resolution is the collector's problem, not `lum`'s.
+
+**The rule everything below serves:** *"I don't know" must never render as "you spent nothing."*
+A `$0.00` on this line is a claim — the collector actively confirmed zero spend today. If `lum`
+cannot make that claim, it must never print a numeral that could be mistaken for one making it.
+That distinction is the entire trustworthiness of a budget tool: a user who trusts a false
+"you're fine" is worse off than one who is told plainly that the tool does not currently know.
+
+**Five states, in descending order of trust:**
+
+| # | State | Meaning | Render | Colour |
+|---|---|---|---|---|
+| 0 | Fresh, full coverage | Collector answered; every configured tool reported | `today $3.20 / $10.00 (32%) ▓▓░░░` (§1/§5 forms) | threshold colour |
+| 1 | Fresh, **partial** coverage | Collector answered; ≥1 configured tool never reported this usage-day | same, `+` `*` suffix, muted | threshold colour + muted `*` |
+| 2 | **Stale** | Collector reachable, but `freshness().lastUpdatedUtc` older than 120s | last known value, entire numeric portion muted, `+` `⋯` suffix | muted (ANSI 246/59), never threshold colour |
+| 3 | **Source down** | Collector was previously detected (`lum doctor` has seen it) but `available()` is false now | last known value if a cache exists, dimmed, `+` `(source down)`; else `lum — (source down)` | muted/dim, no threshold colour |
+| 4 | **No source** | No collector was ever found — nothing on `PATH`, no daemon reachable, `lum doctor` has never seen one | `lum — (no source)` | default terminal foreground, no colour at all |
+
+`120s` for state 2 is a **starting default, not measured** — `RESEARCH.md` does not document a
+collector's own update cadence. Revisit once P1 (`lum today` wired to a live collector,
+`ARCHITECTURE_PROPOSAL.md` §7) shows real latency; this is a one-constant change in
+`adapters/source/*`, not a rendering change.
+
+**Why state 2 and state 3 are different renders, not one "stale" bucket:** a collector that is
+*up but a few seconds behind* (state 2) is still trustworthy — the number is old by seconds, not
+wrong. A collector that has *gone away* (state 3) gives you a number of unknown age; showing it
+with the same soft `⋯` as a 4-second lag overstates confidence in a value that could be hours
+stale. State 3 always renders more strongly muted than state 2, and adds the explicit
+`(source down)` words — text, not just colour weight, because the difference must survive
+`NO_COLOR`.
+
+**Why state 1 (partial) is not folded into "no source" or hidden:** `tools: ["*"]` in config asks
+for every tool the collector can see; if Cursor never reported, the Claude Code and Codex figures
+that did arrive are still trustworthy. Silently omitting Cursor's share would make the total look
+smaller than reality — the same failure mode as `$0.00`-for-unknown, at the tool-composition
+level. Silently degrading the whole line to `no source` would throw away good data unnecessarily.
+The `*` says "trust the number, but it is not the whole picture — see `lum today` (§8)."
+
+**Colour/marker legend, superseding §1's original `<SUFFIX>` line:**
+
+```
+(none)          fresh, full coverage — threshold colour applies normally
+*               fresh, partial tool coverage — muted, appended outside the colour reset
+⋯               stale (collector freshness > 120s) — whole numeric field goes muted, not just the suffix
+(source down)   collector detected before, not answering now — dimmed, cache age unknown
+(no source)     no collector ever found — `lum — (no source)`, default foreground
+```
+
+**Never conflated:** a real `$0.00` (state 0, collector confirms zero spend, full threshold-green
+render, no suffix) must be visually unmistakable from every degraded state above it — none of
+states 1–4 ever prints a `$` numeral without one of the muted markers attached, and none of them
+ever uses threshold green.
+
+**Latch/notification guarantee:** states 2–4 never feed `budget.ts`'s `evaluate()` with a
+synthesized fraction — a threshold can only be crossed, latched, or notified from real data
+(state 0, or state 1 for the tools it *does* have). This was already true in the architecture
+(§3, "Degradation is a first-class state"); this section is where it becomes a rendering rule
+instead of only a policy one.
+
+`lum doctor`'s source/tools framing (§4, corrected above) is how these five states surface for
+diagnosis outside the one-line statusline.
+
+#### 8. `lum today` Per-Tool Breakdown Table — **NEW in v2**
+
+Plain-text table, 80 columns, no colour unless `--color` (same convention as `lum doctor`).
+Sourced entirely from `UsageSourcePort.spendFor()` — one row per tool in `ToolSpend[]`, plus a
+row for any configured tool (`config.tools`) the collector has not reported this usage-day.
+
+```
+lum today                                    usage day 2026-08-24 00:00–24:00 (resets 00:00 local)
+
+TOOL          SPEND      SHARE   TOKENS (in/out)          STATUS
+claude-code   ≈$2.10       66%   142K / 38K                ok
+codex          $0.80       25%    51K / 12K                ok
+cursor         $0.30        9%     8K /  2K                stale
+copilot            —         —         —                   no data
+
+TOTAL         ≈$3.20      100%   201K / 52K
+
+≈ imputed (subscription, not real marginal money)   — not known (never "0", see §7)
+Source: budi · updated 4s ago
+```
+
+**Column widths (80-col budget):**
+
+| Column | Width | Alignment | Notes |
+|---|---|---|---|
+| `TOOL` | 13 | left | tool id verbatim from `ToolSpend.tool` |
+| `SPEND` | 10 | right | `≈$12.34` / `$12.34` / `—` |
+| `SHARE` | 7 | right | % of *reported* spend (see below); `—` if row is `no data` |
+| `TOKENS (in/out)` | 24 | right-of-slash pair | row reads `—` if `ToolSpend.tokens` is absent for that tool |
+| `STATUS` | remainder | left | `ok` \| `stale` \| `no data` — vocabulary matches §7 |
+
+Total: 13 + 10 + 7 + 24 + ~15 ≈ 69 cols, comfortably inside 80 with room for terminal padding.
+
+**Imputed-vs-real, made visible per row, not globally:** `ToolSpend.imputed` is per-tool, not
+per-account — a user can have a Claude Code subscription (imputed) alongside a pay-as-you-go
+Cursor key (real) at once. Each row's `≈` marker is independent of the others.
+
+**Design decision — the `TOTAL` row's own trust marker:** if *any* row is imputed, `TOTAL` also
+carries `≈`, even when other rows are real dollars. **Rationale:** summing a real dollar and an
+imputed one produces a number that is neither — it is not money that left an account, and it is
+not a clean estimate either. Presenting that sum without the same caution mark a single imputed
+figure would carry would be more confident than the number deserves. This mirrors §5's "higher
+percentage wins" call: when signals of different trust levels combine into one figure, the
+combined figure inherits the *more cautious* of the two.
+
+**Unknown-vs-zero at row level (§7's rule, applied to a table):** a tool the collector has never
+reported this usage-day is a `no data` row with `—` in every numeric column — never `$0.00`,
+never `0%`. `SHARE` is computed only over rows with real or stale data (`ok`/`stale`), so a
+`no data` row does not silently deflate the other rows' percentages by pretending it contributed
+zero to the denominator.
+
+**`STATUS` column colour (when `--color` is set):** `ok` renders in default foreground, **not**
+threshold green — per-tool freshness is not a budget-threshold state, and reusing green here
+would make it look like each tool has its own passing/failing budget when only the total does.
+`stale` and `no data` render muted (ANSI 246), matching §7.
+
+**Footer legend is mandatory, not optional:** this is the first surface where `≈` and `—` appear
+without the one-line statusline's implicit context, so the two-line legend is part of the spec,
+not a nice-to-have.
 
 ---
 
 ### Design Principles (adapted for CLI/terminal)
 
-1. **Stateless read, honest about age.** The statusline string is computed from a file, not state
-   held in a process. If the snapshot is stale, show the **last known value with a `⋯` marker**
-   (§6.3) — a number the user can see is 90 seconds old beats `??`, which reads as "broken" and
-   throws away good data. Only a missing or corrupt snapshot renders `lum —`.
+1. **Stateless read, honest about age.** The statusline string is computed from a small cache
+   file that `lum` refreshes from the collector (`ARCHITECTURE_PROPOSAL.md` §6) — never held in a
+   long-running process of ours. If the collector's data is stale, show the **last known value
+   with a `⋯` marker** (§7, corrected for v2 — "stale" describes the collector, not a daemon of
+   ours). A number the user can see is a few seconds old beats `??`, which reads as "broken" and
+   throws away good data. A missing or unreachable collector renders one of §7's `(source down)`
+   / `(no source)` states, never a bare, unexplained `lum —`.
 2. **ANSI-safe first.** Every color has a 16-color fallback. Detect `$TERM` / `$COLORTERM`;
    degrade gracefully to bold/italic when 256-color is unavailable.
 3. **Width discipline.** The statusline owns its own row, so width is a courtesy to other
    segments, not a correctness constraint. Degrade gracefully rather than truncating a number:
-   drop the bar first, then the budget figure. Never truncate the spend value itself.
+   drop the bar first, then the budget figure (§1), or drop pacing then `≈$ today` then the bar
+   (§5/§6 — the order differs because primacy differs, see §5). Never truncate the spend value
+   itself, and never truncate a present rate-limit percentage.
 4. **Threshold state is latched.** Notifications fire once per threshold crossing, not once
-   per file update. The latch resets at `resetHourLocal` (the configured usage-day boundary),
-   which is not necessarily local midnight — see §5.4.
-5. **Subscription vs. API-key rendering.**  Imputed figures use the `≈` prefix and muted color.
+   per file update. The latch resets at `resetHourLocal` (the configured usage-day boundary,
+   `window.ts`'s `usageDayFor`, `ARCHITECTURE_PROPOSAL.md` §2), which is not necessarily local
+   midnight.
+5. **Subscription vs. API-key rendering.** Imputed figures use the `≈` prefix and muted color.
    Exact figures (API-key mode) use a space prefix and full-brightness color.
 6. **Accessibility.** Color is never the only indicator — the `≈` imputed prefix, the `⋯` stale
-   marker, the `?` unknown-model marker and the `%` value all carry meaning independent of ANSI
-   color. `--no-color` (and `NO_COLOR`) must work cleanly.
+   marker, the `*` partial-coverage marker, the `(source down)` words, and the `%` value all
+   carry meaning independent of ANSI color. `--no-color` (and `NO_COLOR`) must work cleanly.
+7. **Primary signal follows the account, not a global default.** `primarySignal: auto`
+   (`ARCHITECTURE_PROPOSAL.md` §4) resolves to rate-limit percentage when Claude Code's stdin
+   carries `rate_limits` and to USD otherwise. §5 (new in v2) is the rate-limit-primary render;
+   §1 is the USD-primary render. Never show both as equally primary — one is always secondary
+   and muted.
+8. **Unknown is never rendered as zero.** The single rule §7 (new in v2) exists to protect: a
+   collector that cannot currently answer must never produce a `$0.00`-shaped line. Every
+   degraded state uses a marker, muted colour, or the `lum — (…)` sentinel — never a bare
+   numeral that could pass for a real reading.
 
 ---
 
@@ -199,6 +490,8 @@ lum doctor
 - **Terminal:** No motion in the statusline. TUI refresh is file-watch-driven (chokidar@4),
   not timer-driven — updates appear only when `today.json` changes.
 - **Progress bar:** Instant redraws on each update; no animation (reduces flicker in iTerm2 / tmux).
+- **Pacing marker (§6, new in v2):** static text, no blink/animation — appears or disappears on
+  redraw only, same cadence as everything else on the line.
 - **Notification:** OS-native animation only; no custom sequencing.
 - **Avoid:** spinners, large gap sections, scroll-snap, oversized type — none applicable in CLI.
 
@@ -206,15 +499,26 @@ lum doctor
 
 ### Pre-Delivery Checklist (adapted for CLI)
 
-- [ ] Statusline renders the `today $X / $BUDGET (P%)` + bar form from §6.3 at all spend values
-- [ ] 16-color ANSI fallback works in `TERM=xterm` (no 256-color)
-- [ ] `--no-color` flag suppresses all escape codes cleanly
-- [ ] Stale snapshot (>60s) shows last value + `⋯`; missing/corrupt shows `lum —`; neither crashes
+- [ ] Statusline renders the `today $X / $BUDGET (P%)` + bar form (§1, USD-primary) or the
+      `5h P% · 7d P%` form (§5, rate-limit-primary) depending on `primarySignal` resolution
+- [ ] 16-color ANSI fallback works in `TERM=xterm` (no 256-color), including the muted role
+      (dim `\e[2m`) used by §6 pacing and §7 degraded markers
+- [ ] `--no-color` / `NO_COLOR` suppresses all escape codes cleanly, on every surface §1–§8
+- [ ] Collector data stale (>120s, §7) shows last known value + `⋯`, muted, never threshold colour
+- [ ] Source down / no source (§7) never renders a `$` numeral without one of §7's markers attached
+- [ ] Partial tool coverage (§7's `*`) shown on the statusline when a configured tool has not
+      reported this usage-day; not conflated with stale or source-down
 - [ ] Subscription mode: `≈` prefix present; notification wording uses "usage allowance"
-- [ ] Threshold latch: notification fires once per crossing, not on every file update
-- [ ] `lum doctor` output fits 80-col terminal without wrapping
+- [ ] Rate-limit-primary line (§5): bar/latch colour follows whichever window (5h or 7d) is
+      numerically higher; `≈$ today` drops before the bar, both drop before a present percentage
+- [ ] Pacing marker (§6) suppressed before 15% of window elapsed and within the 5pp deadzone;
+      always muted colour, never green/amber/red
+- [ ] Threshold latch: notification fires once per crossing, not on every file update; §5/§6
+      never generate a second, separate notification for the same crossing
+- [ ] `lum doctor` (§4, corrected) and `lum today` (§8) both fit 80-col terminal without wrapping
+- [ ] `lum today` `no data` rows render `—`, never `$0.00`/`0%`; `TOTAL` carries `≈` if any row
+      is imputed (§8)
 - [ ] TUI redraws only on file-watch event, not on a polling timer
-- [ ] Codex provisional state shown in `lum doctor` until real session log confirmed (ARCH_Q2)
 
 ---
 
@@ -231,3 +535,8 @@ lum doctor
   dashboard); terminal output uses whatever monospace font the user's terminal is configured with
 - Notification body text uses the A+C hybrid wording: "budget" for API-key accounts,
   "usage allowance" for subscription accounts (single string interpolation in `notify/notifier.ts`)
+- v2 adds four statusline/table surfaces not covered by the original pass: rate-limit-primary
+  statusline, pacing, the five-state degraded/no-source taxonomy, and the `lum today` per-tool
+  table (§5–§8). All four consume `UsageSourcePort` only — none reads a log or computes from one.
+- When in doubt about "stale," "down," or "unknown," §7 is the single source of truth for v2;
+  earlier language in this file describing "our daemon" predates it and is corrected inline above.

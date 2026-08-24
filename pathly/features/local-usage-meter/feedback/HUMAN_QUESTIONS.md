@@ -18,6 +18,14 @@ _Reconstructed 2026-08-24 from the board escalation (`type=escalation`, still `s
 | **PRE-C** | **Does `/analytics/*` return day-shaped per-tool spend?** | One `curl`. Go/no-go on the whole v2 plan before any code. | **OPEN** |
 | **PRE-D** | **Rename the project.** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established OSS project doing exactly this; the repo is `token-tracker`. | Two commits old — cheapest it will ever be to fix. | **OPEN** |
 | **PRE-E** | **Is doubled install friction acceptable?** Users must install a 13 MB Rust collector before our tool does anything. The brief promised "setup is trivial". | Main adoption threat (Risk R1). | **OPEN** |
+| **PRE-F** | **Who writes the statusline's cache?** The statusline can only read; `lum` doesn't reside in memory. So nothing refreshes the meter unless the user types `lum` — the zero-config promise is broken. The only zero-config fix is a detached spawn, which is ARCH_QUESTION 4 again. Options A/B/C in `ARCHITECTURE_PROPOSAL.md` §6. | **Blocks the zero-config promise.** Planning assumes (B), the opt-in path. | **OPEN** |
+| **OPEN-F** | **Should `thresholds` apply to the primary signal or to USD?** On a subscription the headline is rate-limit %, but alerts fire on imputed dollars — so the default user is warned about the wrong thing. | The product's entire wedge is the warning. Firing it on the wrong signal defeats the point. | **OPEN** |
+
+> **PRE-F and OPEN-F were raised by the architect and PO agents on 2026-08-24 and verified.** Both
+> are defects in the v2 architecture, not in the agents' reading of it. Recording them *here* —
+> not only in the artifact that raised them — is deliberate: this file is the register, and a gate
+> that lives only in the document that noticed it is a gate nobody will see. That is precisely how
+> this board lost track of ARCH_QUESTION 2.
 
 ---
 
@@ -25,7 +33,12 @@ _Reconstructed 2026-08-24 from the board escalation (`type=escalation`, still `s
 
 ARCH_QUESTION 2 (Codex sample log) and PRE-10 (ccusage constraint inversion) are **moot under v2**:
 we parse nothing, so neither the Codex log semantics nor the ccusage reuse question binds us.
-ARCH_QUESTION 4 (daemon self-spawn without consent) is **resolved by deletion** — v2 has no daemon.
+ARCH_QUESTION 4 (daemon self-spawn without consent) is **NOT resolved.** An earlier revision of
+this file claimed it was "resolved by deletion — v2 has no daemon." That was wrong, and it is the
+same error this board's record already contains once: declaring a gate closed when it had only
+been moved. Deleting the daemon **relocated** the consent question to the statusline, where it
+returns verbatim as **PRE-F** above. Someone still has to decide whether a process may appear on a
+user's machine unasked.
 ARCH_QUESTIONs 1 and 3 (accountMode, threshold wording) still stand as written.
 
 ## Status at a glance

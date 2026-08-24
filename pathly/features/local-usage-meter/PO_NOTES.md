@@ -49,7 +49,11 @@ The following are explicitly excluded from v1 and must not creep into the build:
 - **Hard-blocking over budget** — advisory only; the tool is a passive log reader and cannot intercept
   the CLI.
 - **Central multi-user aggregation** — no server, no backend, no shared database.
-- **Any network call for the live number** — must use only local log files (fs-watch / short poll);
+- **Any network call for the live number** — ~~must use only local log files (fs-watch / short poll)~~
+  **AMENDED under v2:** no call leaves the machine. The live number comes from a **loopback**
+  request to a collector already running locally (`GET 127.0.0.1:7878`). Nothing is transmitted
+  off-box, which is what this constraint was protecting. Original wording assumed we did the
+  parsing;
   polling the provider console for the live number is prohibited.
 - **Billing-exact accuracy** — "reasonable accuracy" (occasional log undercount) is acceptable;
   optional daily reconciliation against the console is a stretch goal only.
@@ -67,10 +71,11 @@ The following are explicitly excluded from v1 and must not creep into the build:
    absent**. The spirit of the constraint — never re-implement tokenization — is intact: we read
    provider-reported `usage` fields and never count tokens ourselves. The letter is not. This was
    decided by the research and evaluator agents, not by the human who set it.
-2. **Four token classes must be priced separately:** uncached input (1×), cache write (1.25×/2×),
+2. *(Now a COLLECTOR-SELECTION criterion, not our code — see the v2 banner above.)*
+   **Four token classes must be priced separately:** uncached input (1×), cache write (1.25×/2×),
    cache read (0.1×), output incl. reasoning (output rate). Collapsing cache buckets is the top
    accuracy bug.
-3. **Log locations are fixed ground truth:**
+3. *(Now a COLLECTOR-SELECTION criterion, not our code.)* **Log locations are fixed ground truth:**
    - Claude Code: `~/.claude/projects/**/*.jsonl` — field `message.usage` (input_tokens,
      output_tokens, cache_creation_input_tokens, cache_read_input_tokens, model, ts).
    - Codex: `~/.codex/sessions/**` JSONL — turn.completed / token_count events

@@ -162,8 +162,29 @@ rather than a stale or invented number.
 ```
 
 `primarySignal: "auto"` resolves to **rate-limit** when Claude Code's stdin carries `rate_limits`
-(subscription), and to **usd** otherwise (API-key accounts, or Cursor/Copilot-only setups). The
-brief's five original config keys all survive unchanged.
+(subscription), and to **usd** otherwise (API-key accounts, or Cursor/Copilot-only setups).
+
+**Config-key continuity, stated accurately.** Three of the brief's five keys survive verbatim —
+`dailyBudgetUsd`, `resetHourLocal`, `thresholds`. Two changed: `clis` → `tools` (it is no longer
+CLI-specific), and `imputeCostForSubscription` → subsumed by `primarySignal`. Both old names are
+accepted as aliases (`P1-8`). *An earlier draft of this section claimed all five survived
+unchanged; that was false.*
+
+> ### ⚠ OPEN-F — thresholds fire on the wrong signal for the default user. **UNRESOLVED.**
+>
+> ADR-v2-003 makes rate-limit % the headline on subscription accounts. But §2 defines
+> `budget.ts` as `evaluate(spend, cfg)` and `thresholds: [0.8, 1.0]` as a fraction of
+> `dailyBudgetUsd`. So a Max subscriber sees `5h 23% · 7d 41%` on the statusline and is warned
+> when her **imputed dollars** — money that does not exist — cross 80% of a budget she invented.
+>
+> The product's whole wedge is *"warn me before I run out."* As written, for the default persona,
+> v2 warns on the wrong number.
+>
+> The obvious resolution is that `thresholds` apply to whichever signal is **primary** — making
+> `primarySignal` load-bearing for alerting, not just for display — with a separate
+> `budgetThresholds` for the USD track when both matter. That is a product decision about what the
+> user is being protected from, and it is not an agent's to make. `USER_STORIES.md` US-02 is
+> deliberately scoped to the USD fraction only until this is answered.
 
 ---
 
@@ -185,6 +206,13 @@ ccusage ship burn-rate; a budget tool without it is strictly worse than the trac
 Colour semantics, the `≈` imputed marker, the 16-colour fallback, and the notification copy all
 carry over unchanged from `DESIGN.md`.
 
+`DESIGN.md` §5–§8 is authoritative for the rendered detail: the rate-limit line's one/both/neither
+variants and its "worst window wins" rule (`max(5h%, 7d%)` drives the shared bar and the latch),
+the pacing glyph's suppression rules, the five-state degradation taxonomy, and the `lum today`
+table. Two rules from there are **correctness**, not cosmetics, and are repeated here so they
+cannot be lost: **unknown must never render as `$0.00`**, and **notifications fire only from
+trusted (fresh) data — never from stale or partial reads.**
+
 ---
 
 ## 6. Statusline contract
@@ -202,7 +230,33 @@ Unchanged from v1 except that it now reads stdin, and there is no daemon to self
 
 Claude Code debounces statusline updates at 300 ms and **cancels an in-flight script** when a new
 update arrives, so a slow script degrades the line rather than hanging the UI. We still budget for
-< 30 ms: `statusline.js` reads a small cache file that `lum` refreshes; it never calls the collector.
+< 30 ms: `statusline.js` reads a small cache file; it never calls the collector.
+
+> ### ⚠ PRE-F — who writes the cache? **UNRESOLVED. Do not build past this.**
+>
+> Three statements in this document cannot all hold:
+> 1. §6 — the statusline imports `node:fs` only; the snapshot is *"read, never computed"*.
+> 2. ADR-v2-002 — `lum` is invoked; it does not reside in memory.
+> 3. ADR-v2-002's consequence — *"threshold crossings surface on the next statusline tick"*.
+>
+> A statusline tick **cannot** surface anything new: it only reads. So on a machine where the user
+> never manually types `lum`, `state/today.json` is written by nobody and the meter shows a stale
+> file forever. **The zero-configuration promise is broken at the root.**
+>
+> The only fix that preserves zero-config is the statusline spawning a detached refresh — which is
+> **ARCH_QUESTION 4 verbatim**, the "a background process appears without explicit consent"
+> question this board has never answered. `feedback/HUMAN_QUESTIONS.md` previously claimed that
+> question was *"resolved by deletion"*. It was not: deleting the daemon **relocated** the consent
+> question, it did not answer it.
+>
+> | Option | Zero-config? | Consent cost |
+> |---|---|---|
+> | **A** — statusline spawns a throttled detached `lum refresh` | ✅ | a process appears unasked; this is ARCH_QUESTION 4 |
+> | **B** — explicit `lum refresh` only (cron/launchd/manual) | ❌ | none; user opts in |
+> | **C** — collector's own daemon writes our cache via a hook | ✅ | none from us, but couples us to the collector's internals |
+>
+> **Working assumption for planning only: (B).** `IMPLEMENTATION_PLAN.md` task `P3-6` builds the
+> consented path only. This is a human decision and no agent may close it.
 
 ---
 
@@ -236,8 +290,10 @@ add is a new format, a new location, and a permanent maintenance tax. Our value 
 matter right after a turn — when you are not typing, you are not spending — and that is exactly
 when the statusline runs.
 *Rejected.* A second resident daemon beside the collector's.
-*Consequence.* Threshold crossings surface on the next statusline tick or `lum` invocation, not
-instantly in the background. Accepted: worst case is a few seconds.
+*Consequence.* Threshold crossings surface on the next **`lum` invocation** — *not* on a
+statusline tick, which can only read (see PRE-F in §6). Whether anything invokes `lum`
+automatically is exactly PRE-F, and it is unresolved. Until it is, this ADR does not deliver a
+zero-configuration product; it delivers an opt-in one.
 
 **ADR-v2-003 — Rate limits are the primary signal on subscriptions.**
 *Decision.* When Claude Code's stdin carries `rate_limits`, show 5h/7d percentage first; dollars
@@ -249,6 +305,12 @@ optional, with `// empty` the official handling.
 *Consequence.* The field is version-volatile (it regressed in v2.1.96,
 [issue #45133](https://github.com/anthropics/claude-code/issues/45133)). Must degrade to USD
 silently, never error.
+
+*Second consequence, easy to miss.* `rate_limits` arrives **only** on the statusline's stdin, so
+`lum today` and `lum doctor` structurally cannot show the signal this ADR makes primary. Task
+`P3-2` writes a ~200-byte echo file when the statusline sees the block, so the other two surfaces
+can read the last-known value and label its age. Without that, "primary signal" means primary on
+one surface out of three.
 
 **ADR-v2-004 — Privacy by construction, carried over from v1.**
 Unchanged and still enforced by test: no content field ever reaches a record; no network primitive
@@ -266,7 +328,7 @@ output. v2 strengthens this — we no longer read transcripts at all.
 | **R3** | **The collector API is not a stable contract.** | Medium | Confined to one adapter file; contract test per adapter; `lum doctor` reports adapter health |
 | **R4** | **Nobody has asked for this.** No budget/alert issue has ever been filed on budi. Unclaimed and unwanted look identical from outside. | **High — product risk, not technical** | Open an issue on budi describing the feature before building. Validate demand first. |
 | **R5** | `rate_limits` absent or removed by a Claude Code release | Medium | Optional by construction; falls back to USD |
-| **R6** | Collector and our figures disagree | Low | We do no arithmetic on tokens — we display the collector's totals. Divergence is theirs to fix. |
+| **R6** | Collector and our figures disagree | Low | The invariant is narrow and testable: **we never convert tokens to USD.** We do sum the collector's per-tool USD into a total and bucket it into the usage day — that is arithmetic, and it is ours to get right. Pinned by contract case C9. |
 
 ---
 
