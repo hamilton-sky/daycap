@@ -2,6 +2,11 @@
 
 _Last updated: 2026-08-24 — reconciled with ARCHITECTURE_PROPOSAL.md, RESEARCH.md, DESIGN.md_
 
+> **SCOPE CHANGED 2026-08-24 — see `ARCHITECTURE_PROPOSAL.md` v2.** The product is now the
+> budget/alert layer on top of an existing usage collector, across every tool the developer runs.
+> The persona is a multi-tool developer who is **not** the author. Constraint #1 below is resolved
+> by that change: we now reuse an entire collector rather than a pricing table.
+
 > **Constraint #1 has been inverted since this was written.** RESEARCH.md §1 found ccusage ≥ v20
 > is a compiled Rust binary with no importable JS exports, so the design now parses JSONL itself
 > and prices from a vendored LiteLLM table. See constraint #1 below and PRE-10 in
@@ -9,17 +14,26 @@ _Last updated: 2026-08-24 — reconciled with ARCHITECTURE_PROPOSAL.md, RESEARCH
 
 ## Who Is This For
 
-**Primary — Developer (self):** A solo developer who uses Claude Code and/or Codex CLI and wants to
-see today's AI spend against a personal daily budget in near-real-time — without opening a provider
-console and without waiting 1–2 days for server-side aggregation to catch up.
+**Primary — Multi-tool developer (not the author):** Uses several AI coding tools in the same day —
+Claude Code, Codex CLI, **Cursor**, Copilot, others — each with its own console, plan, and limit.
+Wants **one** allowance across all of them and a warning before it is gone, without opening any
+console and without waiting 1–2 days for server-side aggregation.
+
+> Cursor is **not** in the original brief and cannot be served by the v1 design at all. Confirming
+> the exact tool list is prerequisite **PRE-A** — it is the decision the rest of the scope hangs on.
 
 **Secondary (deferred) — Engineering manager:** Wants a per-developer daily rollup on a team
 dashboard. This persona is explicitly out of scope for v1 and has no bearing on the initial build.
 
 ## Definition of Success
 
-A developer can see `today $X / $BUDGET (P%)` in their Claude Code statusline within a few seconds
-of finishing any AI CLI turn — computed entirely from local logs, with no network connection required.
+A developer can see their spend against their allowance — **across every AI tool they use** —
+within a few seconds of finishing a turn, and is warned *before* the allowance is gone. Computed
+entirely on-machine from a local collector, with no account and no internet.
+
+On a subscription account the headline figure is **rate-limit percentage** (`5h 23% · 7d 41%`), not
+imputed dollars: imputed USD is money that does not exist, and Claude Code hands the real constraint
+to the statusline on stdin (ADR-v2-003).
 
 Specific acceptance signals (from the brief, all required for v1):
 1. After one Claude Code turn, today's USD value updates within a few seconds without opening the console.

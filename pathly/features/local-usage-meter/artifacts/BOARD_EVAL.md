@@ -3,6 +3,12 @@
 _Updated: 2026-08-10 · Agent: evaluator · Run: d21298a5_
 _Annotated 2026-08-24 — reconciled against live board state._
 
+> **⚠ SUPERSEDED BY v2.** The 4-phase execution plan below sequences building a collector —
+> readers, tail, pricing, reconciler, daemon. `ARCHITECTURE_PROPOSAL.md` v2 deletes all of it in
+> favour of consuming an existing collector. The 14 board tasks this document orders are obsolete;
+> see v2 §7 for the replacement phases. Kept because Resolutions 1–3 record real decisions and the
+> reasoning is worth reading.
+
 > **None of the state changes this document instructs were ever executed.** It says to mark
 > `726aecdd`, `4a0a6706` and `b7d9a7af` COMPLETE. All three are still `task_status=pending` on
 > the board, with `attempts=0` and no `claimed_by`. So are the other eleven. The analysis below

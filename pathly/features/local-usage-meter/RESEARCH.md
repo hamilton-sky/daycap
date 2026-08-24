@@ -271,3 +271,70 @@ correction, **which has since been applied**:
 3. **statusLine contract is well-documented**: the architecture's approach (ignore stdin, read snapshot, always exit 0) is sound — but explicitly consuming stdin on startup is recommended.
 
 4. **The stdin payload contains `cost.total_cost_usd`** for the active Claude session — useful context for the design to acknowledge, even if the implementation ignores it.
+
+---
+
+## 5. Competitive landscape (added 2026-08-24) — the finding that forced v2
+
+Research §1–§4 asked *how* to build a collector. Nobody asked *whether* one needed building. The
+answer is no.
+
+### The collection layer is commoditised
+
+| Project | Tools covered | Method | Budget + alerts | License |
+|---|---|---|---|---|
+| [budi](https://github.com/siropkin/budi) | Claude Code, Cursor, Codex, Copilot Chat, Copilot CLI | transcript tailing, no proxy, Rust daemon | ❌ | MIT |
+| [Token Tracker](https://github.com/xiufengsun/TokenTracker) | **34 tools**, 2,200+ models, menu-bar + tray apps | log parsing | ❌ | OSS |
+| [coding_agent_usage_tracker](https://github.com/Dicklesworthstone/coding_agent_usage_tracker) | 16+ providers | provider APIs | quota + rate limits | OSS |
+| [ccusage](https://github.com/ryoppippi/ccusage) | Claude + Codex | log parsing | ❌ | MIT |
+
+**budi is v1's architecture, already shipped** — "reads transcript files those tools already write
+to disk. No proxy, no gateway, nothing in your network path." Local-first, MIT, five tools including
+Cursor. Token Tracker's native menu-bar app is v1's P6 stretch goal, already done, for 34 tools.
+
+`ccusage statusline` already prints
+`🤖 Fable 5 | 💰 $0.23 session / $1.23 today / $0.45 block (2h 45m left) | 🔥 $0.12/hr | 🧠 25,000 (12%)`
+offline, reading Claude Code's stdin. That is v1 phases 1–3 and 5.
+
+### The gap that is real
+
+**None of them does a configurable budget with threshold alerts.** Every one answers *"what did I
+spend?"*; not one answers *"am I about to blow my allowance?"* Confirmed by feature docs and by the
+absence of any budget/alert issue on budi's tracker.
+
+That gap is the product. See ADR-v2-001.
+
+### budi integration surface (for `UsageSourcePort`)
+
+- **Rust daemon** on `127.0.0.1:7878`; single SQLite at `~/.local/share/budi/` (Unix) /
+  `%LOCALAPPDATA%\budi` (Windows).
+- **HTTP API:** `/analytics/*`, `/pricing/*`, `/admin/*` — **preferred seam.**
+- **CLI:** `budi stats --format json` — more stable, process-spawn cost. Also `budi status`,
+  `budi doctor`, `budi sessions <id>`.
+- **Do not read the SQLite directly** — couples us to their schema.
+- Health: 936 commits, active CI. But **0 external PRs**, 13 open issues all filed by the owner,
+  issue activity quiet since May 2026. Solo project — hence ≥2 adapters before v1.0 (Risk R2).
+
+### `rate_limits` on the statusline — the metric v1 discarded
+
+Officially documented and present for Claude.ai Pro/Max subscribers after the first API response;
+each window (`five_hour`, `seven_day`) independently optional; official handling is
+`jq -r '.rate_limits.five_hour.used_percentage // empty'`. It regressed out in v2.1.96
+([issue #45133](https://github.com/anthropics/claude-code/issues/45133), closed as duplicate) and
+is back in the current docs — so treat it as optional-by-construction, never as an error.
+
+For a Max subscriber this is the single most useful statusline metric, typically rendered
+`7d:used%/elapsed%` to show whether you are ahead of or behind your weekly quota. v1 explicitly
+refused to read stdin and therefore threw it away. ADR-v2-003 reverses that.
+
+Also on that pipe and free: `cost.total_cost_usd` (session), `context_window.used_percentage`.
+Claude Code debounces statusline updates at 300 ms and **cancels an in-flight script** when a new
+update arrives.
+
+**Sources:** [budi](https://getbudi.dev/) · [budi GitHub](https://github.com/siropkin/budi) ·
+[Token Tracker](https://www.tokentracker.cc/) ·
+[TokenTracker GitHub](https://github.com/xiufengsun/TokenTracker) ·
+[coding_agent_usage_tracker](https://github.com/Dicklesworthstone/coding_agent_usage_tracker) ·
+[ccusage statusline](https://ccusage.com/guide/statusline) ·
+[Claude Code statusline docs](https://code.claude.com/docs/en/statusline) ·
+[Claude Code monitoring roundup](https://www.toriihq.com/articles/five-claude-code-usage-dashboards-and-monitoring-tools)

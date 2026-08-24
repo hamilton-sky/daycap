@@ -9,6 +9,25 @@ _Reconstructed 2026-08-24 from the board escalation (`type=escalation`, still `s
 
 ---
 
+## v2 questions (2026-08-24) — these are the live ones
+
+| # | Question | Why it matters | Status |
+|---|---|---|---|
+| **PRE-A** | **What is the exact tool list?** The brief says Claude Code + Codex. The stated market uses Claude + Codex + **Cursor** + more. | Decides the collector, and whether a zero-install `ccusage` path is even viable. Cursor cannot be served by the v1 design at all. | **OPEN** |
+| **PRE-B** | **Has anyone asked for this?** No budget/alert issue has ever been filed on budi. | Unclaimed and unwanted look identical from outside. File the issue; the response is cheap signal. | **OPEN** |
+| **PRE-C** | **Does `/analytics/*` return day-shaped per-tool spend?** | One `curl`. Go/no-go on the whole v2 plan before any code. | **OPEN** |
+| **PRE-D** | **Rename the project.** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established OSS project doing exactly this; the repo is `token-tracker`. | Two commits old — cheapest it will ever be to fix. | **OPEN** |
+| **PRE-E** | **Is doubled install friction acceptable?** Users must install a 13 MB Rust collector before our tool does anything. The brief promised "setup is trivial". | Main adoption threat (Risk R1). | **OPEN** |
+
+---
+
+## v1 questions — mostly obsolete
+
+ARCH_QUESTION 2 (Codex sample log) and PRE-10 (ccusage constraint inversion) are **moot under v2**:
+we parse nothing, so neither the Codex log semantics nor the ccusage reuse question binds us.
+ARCH_QUESTION 4 (daemon self-spawn without consent) is **resolved by deletion** — v2 has no daemon.
+ARCH_QUESTIONs 1 and 3 (accountMode, threshold wording) still stand as written.
+
 ## Status at a glance
 
 | # | Question | Decided by | Human acknowledged? |

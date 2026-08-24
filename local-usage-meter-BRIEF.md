@@ -1,11 +1,23 @@
 # Feature Brief — LocalUsageMeter
+
+> **⚠ SCOPE CHANGED 2026-08-24 — read `ARCHITECTURE_PROPOSAL.md` (v2) first.**
+> This brief describes building a usage *collector* for two CLIs. That layer turned out to be
+> commoditised — budi, Token Tracker and ccusage already do it for 5–34 tools. The product is now
+> the **budget and alert layer on top of an existing collector**, across every tool the user runs
+> (Claude Code, Codex, **Cursor**, Copilot, …), for **other developers**, not the author.
+> Sections below marked ~~struck~~ are superseded. The problem statement and the acceptance tests
+> still hold.
 _Seed for the Pathly pipeline (STORM → PLAN → DESIGN → BUILD → REVIEW → TEST). Feed this as the
 feature brief and let PLAN/DESIGN refine it into the canonical USER_STORIES.md + IMPLEMENTATION_PLAN.md.
 Self-contained — no dependency on any other repo._
 
 ## One-liner
-A local, per-developer tool that reads Claude Code + Codex CLI session logs in near-real-time and
-shows today's token usage and cost against a configurable daily budget — no server, no proxy, no login.
+A local, per-developer **budget guardrail** for AI coding tools: it reads today's spend from a
+usage collector already on the machine, compares it to a configurable daily budget across **every**
+tool the developer uses, and warns before the allowance is gone — no server, no proxy, no login.
+
+~~A local, per-developer tool that reads Claude Code + Codex CLI session logs in near-real-time…~~
+(superseded: we no longer read logs — see ADR-v2-001.)
 
 ## Problem / context
 Provider consoles (Anthropic / OpenAI) aggregate usage server-side with 1–2 day latency, so a
@@ -19,10 +31,23 @@ immediate, reasonably-accurate number.
 - Out of scope (v1): hard-blocking over budget; central multi-user aggregation; any network/backend.
 
 ## Personas
-- Developer (primary): self-monitor today's AI spend vs a daily allowance, at a glance, without a console.
-- Eng manager (secondary, later): a team rollup — deferred to a future shipper + dashboard stretch.
+- **Multi-tool developer (primary, and NOT the author).** Uses several AI coding tools in one day —
+  Claude Code, Codex CLI, Cursor, Copilot, and others — each with its own console, plan and limit,
+  and no single number anywhere. Wants one allowance across all of them and a warning before it is
+  spent. This persona is why the two-CLI scope in this brief is wrong.
+- Eng manager (secondary, later): a team rollup — deferred entirely.
 
-## Ground truth the build MUST honor
+> The author's own machine is **not** representative: measured over 30 days it was 100.0% Claude
+> Code and 0.001% Codex. Design decisions must come from the target user, not from local logs.
+
+## Ground truth — now the COLLECTOR's responsibility
+
+> Everything in this section is still true about the data. It is no longer **our** code to write.
+> Use it instead as **acceptance criteria for choosing a collector**: a collector that gets these
+> wrong produces wrong numbers, and that is worth testing before adopting one. All three were
+> verified against a real log on 2026-08-24 — see `ARCHITECTURE_PROPOSAL.md` Appendix.
+
+~~## Ground truth the build MUST honor~~
 - Log locations & fields:
   - Claude Code: `~/.claude/projects/**/*.jsonl` — per assistant message `message.usage`:
     input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, model, ts.
@@ -58,17 +83,14 @@ immediate, reasonably-accurate number.
 6. (stretch) As an eng manager, I want each developer's daily rollup shipped to a central dashboard
    (metadata only — tokens/cost/model/identity, NEVER prompt/response bodies), so I can see team usage.
 
-## Implementation plan (seed for IMPLEMENTATION_PLAN.md — each phase = one board task)
-- Phase 1 — Core reader + pricing: parse today's Claude + Codex usage via ccusage; price; print
-  `today $ / budget` once.
-- Phase 2 — Live loop: fs-watch / poll; recompute today; cache a daily ledger (JSON or SQLite) under
-  ~/.localusagemeter/.
-- Phase 3 — Statusline integration: a Claude Code statusLine script printing the readout.
-- Phase 4 — Budget + thresholds: config (dailyBudgetUsd, resetHourLocal, thresholds); amber/red states;
-  notification.
-- Phase 5 — Breakdown UI: per-CLI / per-model; a `--live` terminal dashboard.
-- Phase 6 (stretch) — menu-bar / tray; once-a-day console reconciliation; optional central rollup
-  shipper (metadata only).
+## Implementation plan — SUPERSEDED
+
+The six phases here built a collector. See `ARCHITECTURE_PROPOSAL.md` §7 for the v2 phases
+(P0 spike → P1 core → P2 budget → P3 statusline → P4 portability). P0 is a genuine go/no-go gate:
+one `curl` against the collector's API decides whether the rest of the plan is buildable.
+
+~~Phase 1 Core reader + pricing · Phase 2 Live loop · Phase 3 Statusline · Phase 4 Budget +
+thresholds · Phase 5 Breakdown UI · Phase 6 tray/reconcile/shipper~~
 
 ## Design notes (for DESIGN phase)
 - Primary surface = Claude Code statusline (zero extra window): `today $3.20 / $10.00 (32%) ▓▓▓░░`.
@@ -96,7 +118,9 @@ immediate, reasonably-accurate number.
 `standard` (plan + design + build + review + test) — it's a real product surface and the review/test
 phases matter. Use `lite` only for a throwaway first cut.
 
-## Verification asset the pipeline will need
-Provide ONE real sample log file (e.g. a `~/.claude/projects/<proj>/<session>.jsonl`) so BUILD/TEST
-validate parsing against the actual format, not assumptions. Scrub prompt/response text if sensitive —
-only the `usage` / `model` / `timestamp` fields matter for this tool.
+## Verification asset — SUPPLIED, now advisory
+
+`pathly/features/local-usage-meter/fixtures/claude-session-scrubbed.jsonl` (88 lines, 30 unique
+turns, 58 natural duplicates, whitelist-scrubbed). It no longer gates our build — we parse nothing —
+but it is a good **collector conformance fixture**: a collector that reports the wrong total for
+this file has the dedup or cache-bucket bug.

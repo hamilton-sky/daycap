@@ -1,139 +1,156 @@
 # token-tracker
 
-Planning-stage repo for **LocalUsageMeter** — a local, per-developer tool that reads Claude Code
-and Codex CLI session logs in near-real-time and shows today's token usage and cost against a
-configurable daily budget. No server, no proxy, no login, no network.
+Planning-stage repo for **LocalUsageMeter** — a local **budget guardrail** for AI coding tools.
+It reads today's spend from a usage collector already on the machine, compares it against a
+configurable daily allowance across *every* tool you use — Claude Code, Codex, Cursor, Copilot — and
+warns you before the allowance is gone. No server, no proxy, no login.
 
-> **Status: designed, not built.** There is no `src/` yet. This repo currently holds a feature
-> brief and the design artifacts produced by a [Pathly](https://github.com/hamilton-sky/pathly-adapters)
-> agent pipeline run on 2026-08-10. All 14 planned tasks are still pending. See
+> **Status: designed (v2), not built.** There is no `src/` yet.
+>
+> **The design pivoted on 2026-08-24.** v1 planned to build its own usage collector for two CLIs.
+> Market research found that layer is thoroughly commoditised — [budi](https://github.com/siropkin/budi)
+> ships almost exactly that architecture for five tools, and
+> [Token Tracker](https://github.com/xiufengsun/TokenTracker) covers 34. But **none of them does
+> budgets or alerts.** v2 consumes a collector and owns the policy layer instead. See
 > [Where this stands](#where-this-stands).
 
 ---
 
 ## Why
 
-Provider consoles (Anthropic / OpenAI) aggregate usage server-side with 1–2 day latency, so you
-can't see today's spend in time to stay inside a daily allowance. The local CLI session logs are
-written per-turn and carry the provider-reported `usage` block — reading them gives an immediate,
-reasonably accurate number.
+Provider consoles aggregate usage server-side with 1–2 day latency, so you can't see today's spend
+in time to stay inside a daily allowance. Local transcripts carry the provider-reported `usage`
+block per turn, so a collector reading them gives an immediate, reasonably accurate number — that
+part is solved, several times over.
 
-The intended primary surface is one line in your Claude Code statusline:
+What isn't solved: every AI coding tool has its own console, its own plan, and its own limit. None of them tells you
+your **total** for today, and none of them warns you before you run out. The existing trackers all
+answer *"what did I spend?"* — this answers *"am I about to blow my allowance?"*
+
+The primary surface is one line in your Claude Code statusline:
 
 ```
-today $3.20 / $10.00 (32%) ▓▓░░░          under 80%          (green)
-today $8.40 / $10.00 (84%) ▓▓▓▓░          crossed 80%        (amber + notification)
-today $11.90 / $10.00 (119%) ▓▓▓▓▓        over budget        (red + notification)
-today ≈$3.20 / $10.00 (32%) ▓▓░░░         subscription — imputed at API list rates
-today $3.20 / $10.00 (32%) ▓▓░░░ ⋯        snapshot >60s old, showing last known value
-lum —                                      cold start, no data yet
+today $3.20 / $10.00 (32%) ▓▓░░░          API-key account, under 80%     (green)
+5h 23% · 7d 41% ▓▓░░░  ≈$3.20 today       subscription — rate limit first
+today $6.40 / $10.00 (64%) ▓▓▓░░ ↑        ahead of pace for the time of day
+today $8.40 / $10.00 (84%) ▓▓▓▓░          crossed 80%      (amber + notification)
+today $11.90 / $10.00 (119%) ▓▓▓▓▓        over budget      (red + notification)
+lum — (no source)                          no collector installed or running
 ```
 
-Plus `lum --live` (full-screen breakdown by CLI and model), `lum today` (one-shot table), and
-`lum doctor` (watch mode, snapshot age, pricing version, unknown models, parse errors, drift).
+On a subscription the headline is **rate-limit percentage**, not dollars — imputed USD is money that
+doesn't exist, and Claude Code hands the real constraint to the statusline on stdin. Plus
+`lum today` (per-tool breakdown) and `lum doctor` (which collector, how fresh, what's missing).
 
 ## Design in one diagram
 
-One writer, many dumb readers. The daemon owns all parsing, pricing and state; every UI reads one
-small atomic file. The statusline never touches a log.
+We never parse a log. A collector already on the machine does that — for more tools than we ever
+would — and we own the budget policy on top.
 
 ```
-  ~/.claude/projects/**/*.jsonl ──fs──┐
-                                      ├─►  lum daemon  (single writer, pid-locked)
-  ~/.codex/sessions/**          ──fs──┘    tail → normalize → dedupe → price
-                                                   → fold → latch → snapshot
-                                                          │
-                                          atomic rename   ▼
-                                    ~/.localusagemeter/state/today.json   (<2 KB)
-                                                          │
-                      ┌───────────────────────────────────┼──────────────────┐
-                      ▼                                   ▼                  ▼
-              bin/statusline.js                    lum --live TUI      notifier latch
-              node:fs only, ~1ms read              redraw on change    once per threshold
-              always exit 0                                            per usage-day
+  Claude Code ─┐
+  Codex CLI   ─┤   (collector already tails these)
+  Cursor      ─┼──►  budi daemon :7878  ──► normalised, priced usage
+  Copilot     ─┤     (or Token Tracker, or ccusage)
+  …           ─┘                                  │
+                                          GET /analytics/*
+                                                  ▼
+                     ┌────────────────────────────────────────────┐
+                     │  lum  —  budget policy only                │
+                     │  evaluate → latch → render → notify        │
+                     └───────────────────┬────────────────────────┘
+     Claude Code stdin ──────────────────┤  rate_limits, cost, context_window
+                                         ▼
+                        statusline row · lum today · OS notification
 ```
 
-Node ≥ 20.11 (target 22 LTS), TypeScript, ESM-only. Four layers with strictly inward dependencies:
-`domain/` (pure — no fs, no clock, no network, enforced by lint *and* a test that greps the build
-output), `app/` (orchestration behind ports), `adapters/` (all I/O and third-party contact),
-`bin/` (composition root).
+Node ≥ 20.11, TypeScript, ESM-only. `domain/` is pure (no fs, no clock, no network — enforced by
+lint *and* a test that greps the build output); `adapters/source/*` implements `UsageSourcePort`
+once per collector, so no collector is load-bearing.
 
-### The two traps it's built around
+**No daemon of our own.** v1 needed one to own a dedup set (now the collector's job) and a threshold
+latch (a file, not a process). Deleting it also deletes the lockfile, liveness detection, the
+self-spawning background process nobody consented to, and `service install`.
 
-These are what actually break tools in this category:
+### The traps — now collector-selection criteria
+
+Verified against a real 3,683-line session log on 2026-08-24. We no longer implement these, but a
+collector that gets them wrong reports wrong numbers, so they're worth testing before you trust one:
 
 - **Double-counting.** Claude Code writes the same assistant message into several `.jsonl` files on
-  resume/compact/branch. Without a dedup key on `message.id` + `requestId`, today's total inflates
-  2–3×.
-- **Cache-bucket direction.** Anthropic's `input_tokens` *excludes* cache reads; OpenAI's
-  *includes* them. OpenAI's `output_tokens` *includes* reasoning tokens. Getting a sign wrong
-  shifts cost by up to ~10× on the affected bucket. One normalization boundary, six stored fields,
-  four priced classes (uncached 1×, cache write 1.25×/2×, cache read 0.1×, output).
+  resume/compact/branch. Measured inflation without a `message.id` + `requestId` dedup key: **2.41×**.
+- **Cache-bucket direction.** Anthropic's `input_tokens` *excludes* cache reads (measured: max
+  `input_tokens` = **2** vs max `cache_read_input_tokens` = **992,185**); OpenAI's includes them.
+  Cache read was **97.4%** of a 30-day sample — mispricing it as plain input turns ~$1,135 into ~$6,792.
+- **Cache TTL.** Real logs carried the 5m/1h split on **100%** of turns, and it was **100% 1-hour
+  (2×)** — not the 5-minute tier (1.25×) that v1's own ADR assumed.
 
 ## Repo layout
 
 ```
-local-usage-meter-BRIEF.md              the human-written seed for the pipeline
+local-usage-meter-BRIEF.md              the original seed (scope-change banner at top)
 pathly/features/local-usage-meter/
-  PO_NOTES.md                           personas, success criteria, constraints, open questions
-  ARCHITECTURE_PROPOSAL.md              the design — 10 sections, 9 ADRs, risks, prerequisites
-  RESEARCH.md                           external findings (ccusage, chokidar, statusLine contract)
-  DESIGN.md                             palette, statusline format, TUI layout, notification copy
-  artifacts/BOARD_EVAL.md               execution-readiness review and phase ordering
-  feedback/HUMAN_QUESTIONS.md           the five decisions that need a human, and their status
-  BOARD.json / EVENTS.jsonl / STATE.json   Pathly board + event log for the run (generated)
+  ARCHITECTURE_PROPOSAL.md              ← v2, CURRENT. Start here.
+  archive/…-v1-own-parsers.md           v1 (927 lines), superseded — kept for its reasoning
+  PO_NOTES.md                           personas, success criteria, constraints
+  RESEARCH.md                           §1–4 API findings · §5 competitive landscape (forced v2)
+  DESIGN.md                             palette, statusline format, notification copy
+  fixtures/                             scrubbed real Claude log — collector conformance fixture
+  feedback/HUMAN_QUESTIONS.md           the five open decisions (PRE-A…PRE-E)
+  artifacts/BOARD_EVAL.md               v1 execution plan — superseded
+  BOARD.json / EVENTS.jsonl / STATE.json   Pathly board + event log (generated)
 ```
 
-Start with the brief, then `ARCHITECTURE_PROPOSAL.md` §0 (position statement) and §3 (data model).
-`feedback/HUMAN_QUESTIONS.md` is the shortest path to understanding what is *not* settled.
+Read `ARCHITECTURE_PROPOSAL.md` (v2) first — §1 position statement, §3 the port, §7 phases.
+`feedback/HUMAN_QUESTIONS.md` is the shortest path to what is *not* settled.
 
 ## Where this stands
 
-The pipeline ran PO → architecture → research → design → planning and stopped. It produced ~1,650
-lines of markdown, four goals, fourteen tasks, and no code. `STATE.json` says `DONE`; that means
-planning finished, not that anything shipped.
+A [Pathly](https://github.com/hamilton-sky/pathly-adapters) agent pipeline ran PO → architecture →
+research → design → planning on 2026-08-10 and produced ~1,650 lines of markdown, four goals,
+fourteen tasks, and no code. On 2026-08-24 a competitive review found the design was aimed at the
+commoditised half of the problem, and v2 replaced it.
 
-**Two gates are open and need a human, not an agent:**
+**Five decisions are open, all needing a human:**
 
-| Gate | What it is | Why it matters |
+| # | Decision | Why it matters |
 |---|---|---|
-| **PRE-1** | One real, scrubbed `~/.claude/projects/<proj>/<session>.jsonl` | Every accuracy claim in the design is inferred from documentation. Nobody has looked at a real log line. VERIFY-01/02 cannot be confirmed without it, so acceptance signals 2 and 3 are unverifiable. |
-| **PRE-10** | Sign-off on the constraint-#1 inversion | The brief required reusing [ccusage](https://github.com/ryoppippi/ccusage) to parse both CLIs and to price. Research found ccusage ≥ v20 is a compiled Rust binary with no JS exports, so the design now parses and prices itself, using ccusage only as an optional drift check. Right call, forced by evidence — but decided by agents, not by the human who set the constraint. |
+| **PRE-A** | **The exact tool list.** The brief says Claude Code + Codex; the target market also uses **Cursor**. | Decides the collector, and whether a zero-install path exists. Cursor can't be served by v1's design at all. |
+| **PRE-B** | **Has anyone asked for this?** No budget/alert issue has ever been filed on budi. | Unclaimed and unwanted look identical from outside. File the issue — cheap signal. |
+| **PRE-C** | **Does budi's `/analytics/*` return day-shaped per-tool spend?** | One `curl`. Go/no-go on the whole plan before any code is written. |
+| **PRE-D** | **Rename.** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established OSS project doing exactly this. | The repo is two commits old — cheapest it will ever be to fix. |
+| **PRE-E** | **Is doubled install friction acceptable?** Users install a 13 MB Rust collector before this does anything. | The brief promised "setup is trivial". Main adoption threat. |
 
-Two further decisions were made by agents over an unacknowledged human escalation: the Codex
-sample-log gate (adopted "build to spec, mark provisional" after the evaluator had warned against
-exactly that) and the daemon that self-spawns without explicit consent. Both are documented in
-`feedback/HUMAN_QUESTIONS.md`. **Codex figures should not be trusted until `lum verify-codex` runs
-against a real Codex log.**
-
-## Planned phases
+## Planned phases (v2)
 
 | Phase | Delivers | Exit criteria |
 |---|---|---|
-| **P1** | Domain types, JSONL readers, tail, pricing, `lum today` | Prints `today $X / $BUDGET (P%)`; dedup + Codex-cumulative + reasoning-subset tests green |
-| **P2** | Watch, store, daemon, reconciler, snapshot | Appending a turn updates the snapshot in <1s; `kill -9` mid-write leaves a valid snapshot |
-| **P3** | `bin/statusline.js`, liveness, `lum install-statusline` | <30ms p95; exit 0 on every injected fault; works end-to-end in real Claude Code |
-| **P4** | Budget eval, threshold latch, notifier, colours | Crossing 0.8 then 1.0 fires exactly one notification each, no repeats across restart |
-| **P5** | `lum --live`, `lum today` table, `lum doctor`, service install | Per-CLI and per-model figures reconcile exactly to the total |
-| **P6** | *(stretch)* tray, daily reconciliation, rollup shipper | Out of v1 scope |
+| **P0** | Spike: hit `127.0.0.1:7878/analytics/*`, print today's per-tool spend | Real numbers for ≥2 tools. **Go/no-go gate.** |
+| **P1** | `domain/*`, `budi.http.ts`, `lum today` | Per-tool and total reconcile; degrades cleanly when the daemon is down |
+| **P2** | `budget.ts`, `pacing.ts`, `latch.ts`, notifier | 0.8 then 1.0 fire exactly once; no re-fire across restart or dip-below |
+| **P3** | `statusline.js`, stdin parsing, rate-limit primary | <30 ms p95; exit 0 on every fault; `rate_limits` absent handled silently |
+| **P4** | `ccusage.shellout.ts`, `tokentracker.ts`, `lum doctor` | Works with zero collectors (degraded) and with each one |
 
-Critical path is P1 → P2 → P3. P4 and P5 both hang off P2 and can run in parallel once the
-`Snapshot` shape is frozen at the P2/P3 boundary.
+P0 is a genuine gate, not a formality. If budi's analytics endpoints are session-shaped rather than
+day-shaped, P1 shifts to `budi stats --format json` — worth knowing before anything else exists.
 
-## Non-goals (v1)
+## Non-goals
 
-- Hard-blocking when over budget — a passive log reader cannot intercept the CLI. Advisory only.
+- **Collecting usage.** We consume a collector; we never parse a transcript. That's ADR-v2-001.
+- Hard-blocking when over budget — advisory only; nothing here can intercept a CLI.
 - Central multi-user aggregation — no server, no backend, no shared database.
-- Any network call for the live number — local logs only.
-- Billing-exact accuracy — "reasonable" is the bar; occasional log undercount is acceptable.
+- Any network call beyond `127.0.0.1` to the local collector.
+- Billing-exact accuracy — "reasonable" is the bar.
 
 ## Privacy
 
-Nothing leaves the machine. Parsers whitelist fields rather than spreading parsed objects, so no
-prompt or response content ever reaches a record. No network primitive (`fetch`, `node:http`,
-`node:net`, `undici`) may appear in shipped source — enforced by a lint rule *and* a
-build-artifact grep test, with a canary-string test asserting no fixture content appears in any
-written file.
+Nothing leaves the machine, and v2 strengthens this: we no longer read transcripts at all. The only
+network call any shipped code may make is loopback to the local collector, enforced by a lint rule
+*and* a build-artifact grep test. A canary-string test asserts no fixture content reaches any output.
+
+The fixture in `fixtures/` was built by whitelist — constructing a new object from permitted fields,
+never filtering the original — and verified to contain 10 keys, one content string (`[scrubbed]`),
+zero prose, and zero filesystem paths.
 
 ## License
 
