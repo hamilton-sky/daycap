@@ -79,6 +79,12 @@ if (MODE === "hanging") {
             modelsUsed: ["claude-opus-5"],
             modelBreakdowns: [{ modelName: "claude-opus-5", cost }],
             metadata: { agents: ["claude"] },
+            // The forced-total path must carry canaries too, or the privacy gate would be
+            // vacuous: it would be asserting that strings absent from the payload are absent
+            // from the output.
+            sessionId: corpus.canaries[1],
+            projectPaths: corpus.canaries,
+            sessionTitle: corpus.canaries[0],
           },
         ],
         totals: { totalCost: cost },

@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     environment: "node",
+    // Gate 2 (P1-9): a suite-wide net.Socket hook that fails the run on any non-loopback connect.
+    // A setupFile rather than a single test, because "the product never egresses" is a property of
+    // the whole run — a gate that only watches one file is not a fence.
+    setupFiles: ["test/setup/network-guard.ts"],
     // P1-9 gates hook global state (net.Socket); keep files isolated.
     isolate: true,
     coverage: {
