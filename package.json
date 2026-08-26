@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@11.23.0",
   "bin": {
-    "lum": "./dist/bin/lum.js",
+    "lum": "./dist/lum.js",
     "lum-statusline": "./src/bin/statusline.js"
   },
   "files": [
@@ -25,7 +25,7 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "build": "tsdown",
-    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+    "verify": "pnpm typecheck && pnpm lint && pnpm build && pnpm test"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.14",

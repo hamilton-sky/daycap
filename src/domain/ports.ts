@@ -22,7 +22,8 @@ export class SourceIncompatibleError extends Error {
 /**
  * Everything enters through here. Implemented once per collector.
  *
- * Contract obligations every implementation must satisfy (test/contract/usage-source.contract.ts):
+ * Contract obligations every implementation must satisfy. The executable suite
+ * (test/contract/usage-source.contract.ts) is PLANNED in P1-3 and does not exist yet:
  * - `available()` resolves, never throws, even with no collector present (C2).
  * - `spendFor()` resolves `[]` for an empty window — not null, not a throw (C4).
  * - The window is honoured. An adapter that ignores it and always answers "today" fails C8.

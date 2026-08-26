@@ -1,11 +1,17 @@
 /**
  * Domain types. PURE — no fs, no net, no clock, no `node:*` imports.
- * Enforced by biome (`noNodejsModules` on src/domain/**) and by test/gates/imports.test.ts.
+ * Enforced today by biome (`noNodejsModules` on src/domain/**). A stronger import gate
+ * (test/gates/imports.test.ts) is PLANNED in P1-9 and does not exist yet.
  *
  * ARCHITECTURE_PROPOSAL.md v2 §3 is authoritative for UsageWindow / ToolSpend.
  */
 
-/** A closed instant range. ISO-8601 UTC strings. */
+/**
+ * A HALF-OPEN instant range `[from, to)` — `from` inclusive, `to` exclusive.
+ * ISO-8601 UTC strings. This is the domain's single convention; adapters convert to whatever
+ * their collector wants (budi HTTP `until` is exclusive; budi CLI and ccusage `--until` are
+ * INCLUSIVE). Getting this wrong double-counts the boundary. See domain/window.ts.
+ */
 export type UsageWindow = {
   from: string;
   to: string;

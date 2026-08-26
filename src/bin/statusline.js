@@ -8,7 +8,8 @@
  *  1. **Always exit 0.** A non-zero exit here breaks the user's prompt. Every fault path renders a
  *     degraded string instead.
  *  2. **`node:fs` only.** No network, no child process, no dependency on the collector. It reads a
- *     cached snapshot that `lum` wrote; it never queries a daemon. Enforced by test/gates.
+ *     cached snapshot that `lum` wrote; it never queries a daemon. A test/gates enforcement
+ *     test is PLANNED in P1-9 and does not exist yet.
  *  3. **Never invent a number.** No snapshot, or a stale one, renders `lum — (no source)` — never
  *     `$0.00`. (DoD #3.)
  *
