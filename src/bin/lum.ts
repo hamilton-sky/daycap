@@ -7,16 +7,18 @@
  * reaching for a collector directly from here.
  */
 
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { NullNotifier, OsNotifier } from "../adapters/notify/notifier.ts";
 import { renderToday } from "../adapters/render/table.ts";
 import { CcusageSource } from "../adapters/source/ccusage.shellout.ts";
 import { withTimeout } from "../adapters/source/timeout.ts";
 import { AtomicFileStore, defaultStateDir } from "../adapters/store/atomic.ts";
 import { runAlerts } from "../app/alert.ts";
+import { planInstall, renderPlan } from "../app/install.ts";
 import { buildSnapshot, SNAPSHOT_KEY } from "../app/meter.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
@@ -37,11 +39,12 @@ Usage:
   lum today            today's spend across every configured tool, vs your allowance
   lum doctor           which collector was found, how fresh it is, what is missing
   lum refresh          re-read the collector and update the cached snapshot
+  lum install          print the Claude Code settings block (--write to apply)
   lum --version        print the version
   lum --help           print this message
 `;
 
-type Command = "today" | "doctor" | "refresh" | "version" | "help";
+type Command = "today" | "doctor" | "refresh" | "install" | "version" | "help";
 
 /** Pure: maps argv to a command so it can be tested without spawning a process. */
 export function parseArgs(argv: readonly string[]): { command: Command; unknown?: string } {
@@ -51,6 +54,7 @@ export function parseArgs(argv: readonly string[]): { command: Command; unknown?
     case "today":
     case "doctor":
     case "refresh":
+    case "install":
       return { command: first };
     case "-v":
     case "--version":
@@ -63,13 +67,92 @@ export function parseArgs(argv: readonly string[]): { command: Command; unknown?
   }
 }
 
+/**
+ * `lum refresh` — rebuild the snapshot and evaluate alerts, printing nothing.
+ *
+ * This is what the `Stop` hook runs. It shares the whole pipeline with `lum today`; the only
+ * difference is that it renders nothing, because a hook's stdout is not a place to write to.
+ */
+export async function runRefresh(home: string = homedir()): Promise<number> {
+  const { config, clock, store, source } = await wire(home);
+  const snapshot = await buildSnapshot({ source, clock, config, store });
+  try {
+    await runAlerts({
+      snapshot,
+      config,
+      store,
+      notifier: notifierFor(config),
+      nowIso: new Date(clock.nowMs()).toISOString(),
+    });
+  } catch {
+    // Best-effort, exactly as in `today`.
+  }
+  // Always 0: a hook that exits non-zero is noise in the user's session for something they did
+  // not ask for and cannot act on.
+  return 0;
+}
+
+/**
+ * Where statusline.js actually lives.
+ *
+ * It is NOT bundled — it ships as-is from `src/bin/` (package.json `files`), because it runs on
+ * every prompt and must not pay a transpile step. So the path differs between a built bundle
+ * (`dist/lum.js`, one level below the package root) and a dev checkout (`src/bin/lum.ts`, beside
+ * it). Probing beats guessing: writing a path that does not exist into the user's settings.json
+ * is a broken statusline they will discover at the worst moment.
+ */
+function resolveStatuslinePath(): string {
+  const candidates = [
+    new URL("./statusline.js", import.meta.url), // dev: src/bin/lum.ts -> src/bin/statusline.js
+    new URL("../src/bin/statusline.js", import.meta.url), // built: dist/lum.js -> src/bin/...
+  ].map((u) => fileURLToPath(u));
+  return candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1] ?? "";
+}
+
+/** `lum install` — P3-5 + P3-6. Prints the settings block; `--write` applies it after a backup. */
+export async function runInstall(write: boolean, home: string = homedir()): Promise<number> {
+  const settingsPath = join(home, ".claude", "settings.json");
+  const existing = await readFile(settingsPath, "utf8")
+    .then((t) => JSON.parse(t) as unknown)
+    .catch(() => null);
+
+  const statuslinePath = resolveStatuslinePath();
+  const plan = planInstall(existing, "lum", statuslinePath);
+
+  if (!write) {
+    process.stdout.write(`${renderPlan(plan, settingsPath).join("\n")}\n`);
+    return 0;
+  }
+  if (plan.changes.length === 0) {
+    process.stdout.write(`Already installed in ${settingsPath}.\n`);
+    return 0;
+  }
+  try {
+    await mkdir(dirname(settingsPath), { recursive: true });
+    // Back up BEFORE writing. This file is the user's, and it usually contains hooks they wrote.
+    if (existing !== null) await copyFile(settingsPath, `${settingsPath}.bak`);
+    await writeFile(settingsPath, `${JSON.stringify(plan.merged, null, 2)}\n`, "utf8");
+  } catch (err) {
+    process.stderr.write(`lum install: ${err instanceof Error ? err.message : String(err)}\n`);
+    return 74; // EX_IOERR
+  }
+  process.stdout.write(`Installed: ${plan.changes.join(", ")}\n${settingsPath}\n`);
+  return 0;
+}
+
 /** The composition root. Nothing above this line knows a collector exists. */
-export async function runToday(home: string = homedir()): Promise<number> {
+/**
+ * One composition root, shared by `today` and `refresh`.
+ *
+ * Extracted so the hook path and the human path cannot drift: if `refresh` built its own source
+ * with a different timeout or a different store, the number the statusline shows and the number
+ * `lum today` prints would silently diverge, and nothing would catch it.
+ */
+async function wire(home: string) {
   const configText = await readFile(join(home, ".localusagemeter", "config.json"), "utf8").catch(
     () => null,
   );
   const { config } = parseConfigText(configText);
-
   const clock: ClockPort = {
     nowMs: () => Date.now(),
     timezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
@@ -80,6 +163,18 @@ export async function runToday(home: string = homedir()): Promise<number> {
     // Without this a timed-out ccusage keeps reading the corpus after we have stopped waiting.
     onTimeout: () => collector.killInFlight(),
   });
+  return { config, clock, store, collector, source };
+}
+
+function notifierFor(config: { notifications: { enabled: boolean; command?: readonly string[] } }) {
+  if (!config.notifications.enabled) return new NullNotifier();
+  return new OsNotifier(
+    config.notifications.command === undefined ? {} : { command: config.notifications.command },
+  );
+}
+
+export async function runToday(home: string = homedir()): Promise<number> {
+  const { config, clock, store, source } = await wire(home);
 
   let snapshot = await buildSnapshot({ source, clock, config, store });
 
@@ -92,20 +187,14 @@ export async function runToday(home: string = homedir()): Promise<number> {
     }
   }
 
-  // P2-5. Runs BEFORE rendering so that a crossing is latched and notified even if the render
-  // path somehow fails — and it never throws: an alerting fault must not cost the user the number.
+  // Runs BEFORE rendering so a crossing is latched and notified even if the render path fails —
+  // and it never throws: an alerting fault must not cost the user the number.
   try {
     await runAlerts({
       snapshot,
       config,
       store,
-      notifier: config.notifications.enabled
-        ? new OsNotifier(
-            config.notifications.command === undefined
-              ? {}
-              : { command: config.notifications.command },
-          )
-        : new NullNotifier(),
+      notifier: notifierFor(config),
       nowIso: new Date(clock.nowMs()).toISOString(),
     });
   } catch {
@@ -139,9 +228,12 @@ async function main(argv: readonly string[]): Promise<number> {
       return 0;
     case "today":
       return await runToday();
-    case "doctor":
     case "refresh":
-      process.stderr.write(`lum ${command}: not implemented yet (P2 / P4-5)\n`);
+      return await runRefresh();
+    case "install":
+      return await runInstall(argv.includes("--write"));
+    case "doctor":
+      process.stderr.write(`lum ${command}: not implemented yet (P4-4)\n`);
       return 69; // EX_UNAVAILABLE
   }
 }
