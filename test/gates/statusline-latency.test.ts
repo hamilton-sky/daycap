@@ -89,7 +89,11 @@ describe("P3-4 layer A — the render path (< 5ms p95)", () => {
 const spawny = process.env.CI === "true" || process.env.LUM_PERF === "1" ? describe : describe.skip;
 
 spawny("P3-4 layers B and C — spawn cost", () => {
-  const runs = 60;
+  // 30, not 60: this spawns 2x this many processes and a shared CI runner is slow. p95 over 30
+  // samples is still a p95; the first version budgeted no wall-clock for the measurement itself
+  // and timed out at vitest's 5s default on macOS and Windows while measuring perfectly well.
+  const runs = 30;
+  const BUDGET_MS = 180_000;
 
   function timeSpawn(args: string[]): number[] {
     const out: number[] = [];
@@ -105,7 +109,7 @@ spawny("P3-4 layers B and C — spawn cost", () => {
     return out;
   }
 
-  it("layer B — marginal cost over a bare node boot is < 30ms p95", () => {
+  it("layer B — marginal cost over a bare node boot is < 30ms p95", { timeout: BUDGET_MS }, () => {
     const baseline = p95(timeSpawn(["-e", ""]));
     const actual = p95(timeSpawn([SCRIPT]));
     const marginal = actual - baseline;
@@ -116,7 +120,7 @@ spawny("P3-4 layers B and C — spawn cost", () => {
     ).toBeLessThan(30);
   });
 
-  it("layer C — absolute wall clock is < 150ms p95", () => {
+  it("layer C — absolute wall clock is < 150ms p95", { timeout: BUDGET_MS }, () => {
     expect(p95(timeSpawn([SCRIPT]))).toBeLessThan(150);
   });
 });
