@@ -15,6 +15,7 @@
 import { constants } from "node:fs";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 /** The stored bytes are not the value we wrote. Distinct from "absent", which is `null`. */
 export class StoreCorruptError extends Error {
@@ -39,6 +40,32 @@ export class StoreAccessError extends Error {
 }
 
 const ACCESS_CODES = new Set(["EACCES", "EPERM", "EROFS", "ENOTDIR"]);
+
+/** Transient on Windows only: the target is momentarily held open by another process. */
+const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+
+/**
+ * rename(2) is atomic on POSIX even when the target is open. Windows is different: renaming over
+ * a file another handle has open fails with EPERM until that handle closes.
+ *
+ * That is not hypothetical — it is what the concurrent-writers test hit on the Windows CI leg,
+ * where a reader holds `today.json` open while eight writers rename over it. Retrying with a short
+ * backoff is the standard fix and preserves atomicity: each attempt is still all-or-nothing, we
+ * simply wait for the reader to let go.
+ */
+async function renameWithRetry(tmp: string, target: string, attempts = 12): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      await rename(tmp, target);
+      return;
+    } catch (err) {
+      const code = errnoOf(err);
+      if (i >= attempts - 1 || code === undefined || !RENAME_RETRY_CODES.has(code)) throw err;
+      // 1ms, 2, 4, 8... capped. Windows typically releases the handle within a few ms.
+      await sleep(Math.min(2 ** i, 25));
+    }
+  }
+}
 
 function errnoOf(err: unknown): string | undefined {
   return typeof err === "object" && err !== null && "code" in err
@@ -106,7 +133,7 @@ export class AtomicFileStore {
       } finally {
         await fh.close();
       }
-      await rename(tmp, target);
+      await renameWithRetry(tmp, target);
       await this.#syncDir();
     } catch (err) {
       // Never leave the temp file behind: this runs on every refresh, and a leaked temp per run

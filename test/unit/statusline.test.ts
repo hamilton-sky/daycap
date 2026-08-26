@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -17,7 +17,13 @@ describe("statusline.js", () => {
     // against exactly this; this file did not.
     const out = execFileSync(
       process.execPath,
-      ["--input-type=module", "-e", `await import(${JSON.stringify(statusline)});`],
+      [
+        "--input-type=module",
+        "-e",
+        // pathToFileURL, not the bare path: Windows absolute paths ("D:\\...") are not valid ESM
+        // specifiers and fail with ERR_UNSUPPORTED_ESM_URL_SCHEME.
+        `await import(${JSON.stringify(pathToFileURL(statusline).href)});`,
+      ],
       { encoding: "utf8" },
     );
     expect(out).toBe("");

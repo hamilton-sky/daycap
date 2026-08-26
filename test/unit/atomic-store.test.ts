@@ -86,7 +86,8 @@ describe("AtomicFileStore — atomicity", () => {
 
   it("SIGKILL mid-write never leaves a torn file", async () => {
     const s = new AtomicFileStore(dir);
-    const storePath = new URL("../../src/adapters/store/atomic.ts", import.meta.url).pathname;
+    // .href, not .pathname: a bare Windows path is not a valid ESM specifier.
+    const storePath = new URL("../../src/adapters/store/atomic.ts", import.meta.url).href;
 
     // The child runs EIGHT concurrent write loops, not one.
     //
