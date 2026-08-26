@@ -7,9 +7,29 @@
  * reaching for a collector directly from here.
  */
 
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { NullNotifier, OsNotifier } from "../adapters/notify/notifier.ts";
+import { renderToday } from "../adapters/render/table.ts";
+import { CcusageSource } from "../adapters/source/ccusage.shellout.ts";
+import { withTimeout } from "../adapters/source/timeout.ts";
+import { AtomicFileStore, defaultStateDir } from "../adapters/store/atomic.ts";
+import { runAlerts } from "../app/alert.ts";
+import { buildSnapshot, SNAPSHOT_KEY } from "../app/meter.ts";
+import { parseConfigText } from "../domain/config.ts";
+import type { ClockPort } from "../domain/ports.ts";
+import type { UsageSnapshot } from "../domain/types.ts";
 
 const VERSION = "0.0.0";
+
+/**
+ * Measured, not guessed: ~35 ms of process overhead plus a full corpus read — ~90 ms warm and
+ * ~980 ms cold on a 261 MB corpus, and the corpus only grows. The plan's 1500 ms was marginal
+ * today and would not survive growth; 300 ms would kill every cold start. See M1_RESULT.md §1.
+ */
+const SOURCE_TIMEOUT_MS = 3000;
 
 const USAGE = `lum — local budget guardrail for AI coding tools
 
@@ -43,6 +63,65 @@ export function parseArgs(argv: readonly string[]): { command: Command; unknown?
   }
 }
 
+/** The composition root. Nothing above this line knows a collector exists. */
+export async function runToday(home: string = homedir()): Promise<number> {
+  const configText = await readFile(join(home, ".localusagemeter", "config.json"), "utf8").catch(
+    () => null,
+  );
+  const { config } = parseConfigText(configText);
+
+  const clock: ClockPort = {
+    nowMs: () => Date.now(),
+    timezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
+  };
+  const store = new AtomicFileStore(defaultStateDir(home));
+  const collector = new CcusageSource();
+  const source = withTimeout(collector, SOURCE_TIMEOUT_MS, {
+    // Without this a timed-out ccusage keeps reading the corpus after we have stopped waiting.
+    onTimeout: () => collector.killInFlight(),
+  });
+
+  let snapshot = await buildSnapshot({ source, clock, config, store });
+
+  // Degradation matrix: a slow or unreachable collector falls back to the last good snapshot,
+  // which `buildSnapshot` deliberately did not overwrite.
+  if (snapshot.health.kind !== "ok") {
+    const cached = await store.read<UsageSnapshot>(SNAPSHOT_KEY).catch(() => null);
+    if (cached !== null && cached.schema === 1) {
+      snapshot = { ...cached, health: snapshot.health };
+    }
+  }
+
+  // P2-5. Runs BEFORE rendering so that a crossing is latched and notified even if the render
+  // path somehow fails — and it never throws: an alerting fault must not cost the user the number.
+  try {
+    await runAlerts({
+      snapshot,
+      config,
+      store,
+      notifier: config.notifications.enabled
+        ? new OsNotifier(
+            config.notifications.command === undefined
+              ? {}
+              : { command: config.notifications.command },
+          )
+        : new NullNotifier(),
+      nowIso: new Date(clock.nowMs()).toISOString(),
+    });
+  } catch {
+    // Alerting is best-effort. `lum doctor` reports latch health (P4-4).
+  }
+
+  const lines = renderToday(snapshot, config, {
+    nowMs: clock.nowMs(),
+    width: process.stdout.columns ?? 80,
+  });
+  process.stdout.write(`${lines.join("\n")}\n`);
+  // Every matrix row is a NORMAL state and exits 0. A non-zero exit here would break any prompt
+  // or script that shells out to us.
+  return 0;
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   const { command, unknown } = parseArgs(argv);
 
@@ -59,11 +138,10 @@ async function main(argv: readonly string[]): Promise<number> {
       process.stdout.write(USAGE);
       return 0;
     case "today":
+      return await runToday();
     case "doctor":
     case "refresh":
-      // Deliberately not stubbed with a fake number: "unknown must never render as $0.00" is a
-      // correctness rule (DoD #3), and that includes during construction.
-      process.stderr.write(`lum ${command}: not implemented yet (P1-7 / P1-8)\n`);
+      process.stderr.write(`lum ${command}: not implemented yet (P2 / P4-5)\n`);
       return 69; // EX_UNAVAILABLE
   }
 }

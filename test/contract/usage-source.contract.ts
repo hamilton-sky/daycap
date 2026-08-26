@@ -37,12 +37,29 @@ import {
 
 const T0 = Date.parse("2026-08-25T12:00:00.000Z");
 
-/** Comparable, order-independent shape: tool + integer cents + imputed. */
-function normalize(
-  rows: readonly ToolSpend[],
-): Array<{ tool: string; cents: number | null; imputed: boolean }> {
+/**
+ * Comparable, order-independent shape: tool + integer cents.
+ *
+ * `imputed` is deliberately NOT compared. It means "subscription money that was never actually
+ * charged", which is a property of the ACCOUNT, not of the collector's data — ccusage prices
+ * everything at API list rates and exposes nothing about how the account is billed. Resolving it
+ * is app/'s job (ARCH-Q1's accountMode resolver). Requiring every adapter to reproduce the
+ * corpus's per-row flag would make this contract unpassable for any real collector, for a value
+ * the adapter cannot legitimately know. C5 still pins that it is a boolean.
+ */
+function normalize(rows: readonly ToolSpend[]): Array<{ tool: string; cents: number | null }> {
   return rows
-    .map((r) => ({ tool: r.tool, cents: toCents(r.usd), imputed: r.imputed }))
+    .map((r) => ({ tool: r.tool, cents: toCents(r.usd) }))
+    .sort((a, b) => a.tool.localeCompare(b.tool));
+}
+
+/** The corpus's expectations, reduced to the same shape. */
+function expected(rows: readonly { tool: string; cents: number | null }[]): Array<{
+  tool: string;
+  cents: number | null;
+}> {
+  return rows
+    .map((r) => ({ tool: r.tool, cents: r.cents }))
     .sort((a, b) => a.tool.localeCompare(b.tool));
 }
 
@@ -148,8 +165,8 @@ export function runUsageSourceContract(h: SourceHarness): void {
       const full = await s.source.spendFor(corpus.windows.full);
 
       expect(normalize(empty)).toEqual([]);
-      expect(normalize(narrow)).toEqual(corpus.expected[narrowName]);
-      expect(normalize(full)).toEqual(corpus.expected.full);
+      expect(normalize(narrow)).toEqual(expected(corpus.expected[narrowName]));
+      expect(normalize(full)).toEqual(expected(corpus.expected.full));
 
       // The discriminator. An adapter that ignores the window and always answers the same thing
       // cannot satisfy a strict inequality between two different non-empty windows.
@@ -218,21 +235,36 @@ export function runUsageSourceContract(h: SourceHarness): void {
     );
 
     caseIt("C11b", "the hung child process is killed, not abandoned", async () => {
-      const started = await open("hanging", 50);
-      const pid = started.pid;
-      expect(pid, "a spawning harness must report its pid").toBeDefined();
-      let killed = false;
-      const guarded = withTimeout(started.source, 50, {
-        onTimeout: () => {
-          killed = true;
-        },
+      const started = await open("hanging", 200);
+      expect(started.inFlightPid, "a spawning harness must expose inFlightPid()").toBeDefined();
+      const guarded = withTimeout(started.source, 200, {
+        onTimeout: () => started.killInFlight?.(),
       });
-      await expect(guarded.spendFor(corpus.windows.full)).rejects.toBeInstanceOf(
-        SourceTimeoutError,
-      );
-      expect(killed, "withTimeout must invoke the child-kill hook").toBe(true);
-      // The process must actually be gone: signal 0 probes liveness without sending a signal.
-      expect(() => process.kill(pid as number, 0)).toThrow();
+
+      // Do NOT await yet: the child is spawned inside spendFor, so the pid only exists once the
+      // call is in flight. Poll for it, then await the rejection.
+      const pending = guarded.spendFor(corpus.windows.full);
+      let pid: number | undefined;
+      for (let i = 0; i < 200 && pid === undefined; i++) {
+        pid = started.inFlightPid?.();
+        if (pid === undefined) await new Promise((r) => setTimeout(r, 5));
+      }
+      expect(pid, "collector process never started").toBeDefined();
+
+      await expect(pending).rejects.toBeInstanceOf(SourceTimeoutError);
+
+      // Signal 0 probes liveness without delivering a signal. Poll, because SIGKILL delivery and
+      // reaping are not instantaneous and a strict assertion would flake.
+      let dead = false;
+      for (let i = 0; i < 200 && !dead; i++) {
+        try {
+          process.kill(pid as number, 0);
+          await new Promise((r) => setTimeout(r, 5));
+        } catch {
+          dead = true;
+        }
+      }
+      expect(dead, `collector pid ${pid} survived its timeout`).toBe(true);
       await started.stop();
     });
 
