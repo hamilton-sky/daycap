@@ -15,6 +15,18 @@
 export type UsageWindow = {
   from: string;
   to: string;
+  /**
+   * IANA zone the window was computed in. Carried on the window ITSELF, not read from the
+   * environment, for two reasons:
+   *
+   * 1. A day-granularity collector (ccusage reports whole calendar days) has to map this instant
+   *    range back onto calendar dates, and that mapping needs a zone. An adapter that reaches for
+   *    `process.env.TZ` to get it makes contract case C14 unpassable by construction — results
+   *    would depend on ambient state rather than only on the window.
+   * 2. PRE-G measured the cost of getting the axis wrong at 1.90x on the spike machine
+   *    ($16.37 UTC vs $31.13 local for one date). An implicit axis is how that happens.
+   */
+  tz: string;
 };
 
 /**
@@ -25,7 +37,16 @@ export type UsageWindow = {
  */
 export type ToolSpend = {
   tool: string;
-  usd: number;
+  /**
+   * The collector's own price for this tool in this window, or `null` when the collector reported
+   * activity it could not price.
+   *
+   * `null` is NOT zero and must never render as `$0.00` (DoD #3) — it renders as an em dash. The
+   * nullable type is what makes that rule enforceable: with `usd: number` the only way to express
+   * "priced nothing" is `0`, and the render layer can no longer tell the two apart. Contract case
+   * C9c pins this.
+   */
+  usd: number | null;
   /** Subscription account => this is imputed money that does not exist. */
   imputed: boolean;
   tokens?: {
@@ -67,8 +88,16 @@ export type UsageSnapshot = {
   sourceFresh: boolean;
   health: SourceHealth;
   tools: readonly ToolSpend[];
-  /** Sum of per-tool USD. Summing USD is allowed; deriving USD from tokens is not (§8 finding 1). */
-  totalUsd: number;
+  /**
+   * Sum of the per-tool USD that could be priced, or `null` when nothing could be.
+   *
+   * Summing the collector's USD is allowed; deriving USD from tokens is not (§8 finding 1).
+   * Unpriceable rows are excluded from the sum rather than counted as zero — `pricingPartial`
+   * says whether that happened, so a partial total is never presented as a complete one.
+   */
+  totalUsd: number | null;
+  /** True when at least one tool reported activity that the collector could not price. */
+  pricingPartial: boolean;
   imputed: boolean;
   /**
    * True when the source could not give calendar-day rows and the adapter bucketed sessions by

@@ -9,15 +9,28 @@
 
 import type { ToolSpend, UsageWindow } from "./types.ts";
 
-/** Raised when a source answers but its payload does not match any known schema (contract C12). */
-export class SourceIncompatibleError extends Error {
-  readonly sourceId: string;
-  constructor(sourceId: string, detail: string) {
-    super(`source ${sourceId} returned an incompatible payload: ${detail}`);
-    this.name = "SourceIncompatibleError";
-    this.sourceId = sourceId;
-  }
-}
+// Error classes live in ./errors.ts so this file stays interfaces-only. Re-exported because every
+// implementor of UsageSourcePort needs them and should not have to know they moved.
+export {
+  SourceError,
+  SourceIncompatibleError,
+  SourceTimeoutError,
+  SourceUnavailableError,
+} from "./errors.ts";
+
+/**
+ * How finely a source can slice time.
+ *
+ * `day`     — the collector only reports whole calendar days (ccusage `daily`). A window that is
+ *             not day-aligned (any `resetHourLocal` other than 0) necessarily over-fetches at both
+ *             ends, so the total is approximate.
+ * `instant` — the collector can honour an arbitrary instant range exactly.
+ *
+ * The adapter states the FACT. `app/meter.ts` owns the POLICY — it is what decides to set
+ * `dayBoundaryApprox` and render a `~` prefix. Keeping the two apart is why this is on the port
+ * and not a boolean the adapter computes for itself.
+ */
+export type SourceGranularity = "day" | "instant";
 
 /**
  * Everything enters through here. Implemented once per collector.
@@ -30,12 +43,16 @@ export class SourceIncompatibleError extends Error {
  *   This is not hypothetical: budi returns HTTP 200 with ALL-TIME data for an unrecognised range
  *   param, which on the spike machine was $912.87 reported as "today". See SPIKE_RESULT.md §3.
  * - No re-pricing. The collector's USD passes through with drift < 1e-9 (C9).
- * - Settles within its timeout; never hangs (C11).
+ * - Settles within its timeout; never hangs (C11). On timeout it REJECTS with SourceTimeoutError
+ *   and never resolves `[]` — an empty array is indistinguishable from "the collector confirms
+ *   zero spend", which is the `$0.00` bug wearing a different hat.
  * - Loopback only. No socket outside 127.0.0.1 / ::1 (C13).
  */
 export interface UsageSourcePort {
   /** Stable, non-empty, identical across constructions (C1). */
   readonly id: string;
+  /** What this source can actually resolve. Read by app/, never branched on inside an adapter. */
+  readonly granularity: SourceGranularity;
   available(): Promise<boolean>;
   spendFor(window: UsageWindow): Promise<ToolSpend[]>;
   freshness(): Promise<{ lastUpdatedUtc: string | null }>;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { SourceIncompatibleError } from "../../src/domain/ports.ts";
+import {
+  SourceError,
+  SourceIncompatibleError,
+  SourceTimeoutError,
+  SourceUnavailableError,
+} from "../../src/domain/ports.ts";
 
 /**
  * `ports.ts` is interfaces plus one error class. The error is the C12 contract case's failure
@@ -28,5 +33,33 @@ describe("SourceIncompatibleError", () => {
       caught = e;
     }
     expect(caught).toBeInstanceOf(SourceIncompatibleError);
+  });
+});
+
+describe("SourceTimeoutError / SourceUnavailableError", () => {
+  it("SourceTimeoutError carries the budget it exceeded", () => {
+    const err = new SourceTimeoutError("ccusage", 300);
+    expect(err).toBeInstanceOf(SourceError);
+    expect(err.afterMs).toBe(300);
+    expect(err.sourceId).toBe("ccusage");
+    expect(err.name).toBe("SourceTimeoutError");
+    expect(err.message).toContain("300ms");
+  });
+
+  it("SourceUnavailableError names what it looked for, so doctor can print it", () => {
+    const err = new SourceUnavailableError("ccusage", ["node_modules/@ccusage", "PATH"]);
+    expect(err).toBeInstanceOf(SourceError);
+    expect(err.lookedFor).toEqual(["node_modules/@ccusage", "PATH"]);
+    expect(err.message).toContain("PATH");
+    expect(err.name).toBe("SourceUnavailableError");
+  });
+
+  it("every source error is catchable as one type", () => {
+    const errs = [
+      new SourceIncompatibleError("a", "x"),
+      new SourceTimeoutError("b", 1),
+      new SourceUnavailableError("c", []),
+    ];
+    expect(errs.every((e) => e instanceof SourceError)).toBe(true);
   });
 });

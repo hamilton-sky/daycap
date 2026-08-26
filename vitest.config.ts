@@ -15,6 +15,15 @@ export default defineConfig({
         // P1-2 acceptance: 100% branch coverage on the day-boundary logic.
         "src/domain/window.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/domain/ports.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        // Typed failure channels and the one place a time budget is enforced. Both are small,
+        // both are load-bearing for C2/C10/C11, and a gap in either degrades silently at runtime.
+        "src/domain/errors.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/adapters/source/timeout.ts": {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
       },
     },
   },

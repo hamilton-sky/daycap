@@ -234,7 +234,13 @@ export function usageDayRange(
   const startMs = civilToInstant(year, month, day, resetHourLocal, zone);
   const next = addCivilDays(year, month, day, 1);
   const endMs = civilToInstant(next.year, next.month, next.day, resetHourLocal, zone);
-  return { from: new Date(startMs).toISOString(), to: new Date(endMs).toISOString() };
+  // The RESOLVED zone travels with the window, not the caller's possibly-null argument: an
+  // adapter must be able to map this range onto calendar dates without re-deriving the host zone.
+  return {
+    from: new Date(startMs).toISOString(),
+    to: new Date(endMs).toISOString(),
+    tz: zone,
+  };
 }
 
 /**

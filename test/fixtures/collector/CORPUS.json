@@ -1,0 +1,208 @@
+{
+  "_readme": [
+    "Adapter-independent ground truth for the UsageSourcePort contract (P1-3).",
+    "The in-memory fake and every real adapter's fixtures encode THIS. When an adapter and the",
+    "fake disagree, the fake is right and the adapter has a bug.",
+    "",
+    "All windows are in the CLOSED PAST on purpose. C7 (idempotence) and C8 (window honoured)",
+    "are both flaky or vacuous against a window containing 'now': an adapter that ignores the",
+    "window and always answers 'today' passes a two-window test whenever the corpus happens to be",
+    "today's. Closed-past windows make that adapter fail no matter what day CI runs.",
+    "",
+    "Money is asserted in INTEGER CENTS. Float sums drift, and C9's '< 1e-9' tolerance hides the",
+    "drift instead of catching the re-pricing it is meant to catch."
+  ],
+  "rows": [
+    {
+      "_case": "C9b \u2014 the inconsistency trap. $1.23 against 5,000,000 tokens matches NO price table",
+      "_case2": "on earth. An adapter that returns anything but 1.23 here is pricing tokens itself,",
+      "_case3": "which ADR-v2-001 forbids. This is what makes 'no re-pricing' observable.",
+      "at": "2026-08-20T10:00:00.000Z",
+      "tool": "claude-code",
+      "usd": 1.23,
+      "imputed": true,
+      "tokens": {
+        "in": 5000000,
+        "out": 12000,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "_canary": "CANARY-repo-name-must-not-leak"
+    },
+    {
+      "at": "2026-08-21T09:00:00.000Z",
+      "tool": "claude-code",
+      "usd": 4.0,
+      "imputed": true,
+      "tokens": {
+        "in": 40000,
+        "out": 8000,
+        "cacheRead": 1000,
+        "cacheWrite": 500
+      },
+      "_canary": "CANARY-session-title-must-not-leak"
+    },
+    {
+      "at": "2026-08-21T15:00:00.000Z",
+      "tool": "codex",
+      "usd": 2.5,
+      "imputed": false,
+      "tokens": {
+        "in": 25000,
+        "out": 5000,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "_canary": "CANARY-file-path-must-not-leak"
+    },
+    {
+      "_case": "C9c \u2014 activity the collector could not price. MUST surface usd:null, never 0.00.",
+      "at": "2026-08-22T11:00:00.000Z",
+      "tool": "priceless-tool",
+      "usd": null,
+      "imputed": false,
+      "tokens": {
+        "in": 9000,
+        "out": 1000,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "_canary": "CANARY-prompt-text-must-not-leak"
+    },
+    {
+      "_case": "C6 \u2014 a tool id no alias map knows. Must pass through VERBATIM, not be dropped or",
+      "_case2": "coerced. P1-1 forbids a per-tool branch anywhere in src/, so there is no allowlist.",
+      "at": "2026-08-22T12:00:00.000Z",
+      "tool": "weird-tool-9000",
+      "usd": 0.1,
+      "imputed": false,
+      "_canary": "CANARY-cwd-must-not-leak"
+    },
+    {
+      "_case": "Half-open boundary probe. Sits exactly on narrowDay's exclusive `to`. An adapter using",
+      "_case2": "<= instead of < includes it in narrowDay and fails C8. Inside `full`, outside `narrowDay`.",
+      "at": "2026-08-22T00:00:00.000Z",
+      "tool": "boundary-tool",
+      "usd": 0.05,
+      "imputed": false,
+      "_canary": "CANARY-boundary-must-not-leak"
+    },
+    {
+      "_case": "Half-open boundary probe for INSTANT harnesses. Sits exactly on narrowInstant's",
+      "_case2": "exclusive `to` (12:00). Inside full and narrowDay; excluded from narrowInstant.",
+      "at": "2026-08-21T12:00:00.000Z",
+      "tool": "boundary-instant",
+      "usd": 0.07,
+      "imputed": false,
+      "_canary": "CANARY-boundary-instant-must-not-leak"
+    }
+  ],
+  "windows": {
+    "full": {
+      "from": "2026-08-20T00:00:00.000Z",
+      "to": "2026-08-23T00:00:00.000Z",
+      "tz": "UTC"
+    },
+    "narrowDay": {
+      "from": "2026-08-21T00:00:00.000Z",
+      "to": "2026-08-22T00:00:00.000Z",
+      "tz": "UTC"
+    },
+    "narrowInstant": {
+      "from": "2026-08-21T08:00:00.000Z",
+      "to": "2026-08-21T12:00:00.000Z",
+      "tz": "UTC"
+    },
+    "empty": {
+      "from": "2026-08-18T00:00:00.000Z",
+      "to": "2026-08-19T00:00:00.000Z",
+      "tz": "UTC"
+    }
+  },
+  "expected": {
+    "full": [
+      {
+        "tool": "boundary-instant",
+        "cents": 7,
+        "imputed": false
+      },
+      {
+        "tool": "boundary-tool",
+        "cents": 5,
+        "imputed": false
+      },
+      {
+        "tool": "claude-code",
+        "cents": 523,
+        "imputed": true
+      },
+      {
+        "tool": "codex",
+        "cents": 250,
+        "imputed": false
+      },
+      {
+        "tool": "priceless-tool",
+        "cents": null,
+        "imputed": false
+      },
+      {
+        "tool": "weird-tool-9000",
+        "cents": 10,
+        "imputed": false
+      }
+    ],
+    "narrowDay": [
+      {
+        "tool": "boundary-instant",
+        "cents": 7,
+        "imputed": false
+      },
+      {
+        "tool": "claude-code",
+        "cents": 400,
+        "imputed": true
+      },
+      {
+        "tool": "codex",
+        "cents": 250,
+        "imputed": false
+      }
+    ],
+    "narrowInstant": [
+      {
+        "tool": "claude-code",
+        "cents": 400,
+        "imputed": true
+      }
+    ],
+    "empty": []
+  },
+  "totals": {
+    "full": 795,
+    "narrowDay": 657,
+    "narrowInstant": 400,
+    "empty": 0
+  },
+  "probes": {
+    "unknownToolId": "weird-tool-9000",
+    "inconsistentTool": "claude-code",
+    "inconsistentWindow": "onlyInconsistentRow",
+    "inconsistentExactUsd": 1.23,
+    "pricelessTool": "priceless-tool"
+  },
+  "onlyInconsistentRow": {
+    "from": "2026-08-20T00:00:00.000Z",
+    "to": "2026-08-21T00:00:00.000Z",
+    "tz": "UTC"
+  },
+  "canaries": [
+    "CANARY-repo-name-must-not-leak",
+    "CANARY-session-title-must-not-leak",
+    "CANARY-file-path-must-not-leak",
+    "CANARY-prompt-text-must-not-leak",
+    "CANARY-cwd-must-not-leak",
+    "CANARY-boundary-must-not-leak",
+    "CANARY-boundary-instant-must-not-leak"
+  ]
+}

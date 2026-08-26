@@ -22,6 +22,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const NO_SOURCE = "lum — (no source)";
 const SNAPSHOT = join(homedir(), ".localusagemeter", "state", "today.json");
@@ -59,10 +60,24 @@ function main() {
   process.stdout.write(`${line}\n`);
 }
 
-try {
-  main();
-} catch {
-  // Invariant 1: the prompt must never break.
-  process.stdout.write(`${NO_SOURCE}\n`);
+/**
+ * Only run when executed directly. Same guard, and same reason, as bin/lum.ts: without it,
+ * importing this module to table-test `render()` runs the whole CLI as a side effect and writes a
+ * stray line to stdout mid-suite. P3 tests every degradation state through `render()`, so this has
+ * to be in place before that suite exists, not after it starts emitting noise.
+ */
+function isDirectInvocation() {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  return import.meta.url === pathToFileURL(entry).href;
 }
-process.exitCode = 0;
+
+if (isDirectInvocation()) {
+  try {
+    main();
+  } catch {
+    // Invariant 1: the prompt must never break.
+    process.stdout.write(`${NO_SOURCE}\n`);
+  }
+  process.exitCode = 0;
+}
