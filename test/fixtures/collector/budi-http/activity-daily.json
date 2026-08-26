@@ -1,0 +1,272 @@
+[
+  {
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3171200,
+    "cost_cents": 362.324,
+    "input_tokens": 221810,
+    "label": "2026-07-10",
+    "message_count": 53,
+    "output_tokens": 30953,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 43262208,
+    "cost_cents": 3736.3467,
+    "input_tokens": 2165630,
+    "label": "2026-07-11",
+    "message_count": 314,
+    "output_tokens": 167635,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4960384,
+    "cost_cents": 487.7847,
+    "input_tokens": 370871,
+    "label": "2026-07-12",
+    "message_count": 51,
+    "output_tokens": 18110,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 19111,
+    "cache_read_tokens": 87856,
+    "cost_cents": 12.1263,
+    "input_tokens": 4,
+    "label": "2026-07-18",
+    "message_count": 2,
+    "output_tokens": 2724,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 197730,
+    "cache_read_tokens": 20023778,
+    "cost_cents": 579.448,
+    "input_tokens": 242,
+    "label": "2026-07-19",
+    "message_count": 121,
+    "output_tokens": 99832,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 24221,
+    "cache_read_tokens": 200483,
+    "cost_cents": 15.9587,
+    "input_tokens": 8,
+    "label": "2026-07-22",
+    "message_count": 4,
+    "output_tokens": 2259,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 182176,
+    "cache_read_tokens": 7447830,
+    "cost_cents": 265.1312,
+    "input_tokens": 156,
+    "label": "2026-07-27",
+    "message_count": 78,
+    "output_tokens": 43273,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 125686,
+    "cache_read_tokens": 2080728,
+    "cost_cents": 109.6656,
+    "input_tokens": 28,
+    "label": "2026-07-28",
+    "message_count": 14,
+    "output_tokens": 17771,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 206203,
+    "cache_read_tokens": 12036067,
+    "cost_cents": 375.0581,
+    "input_tokens": 1090,
+    "label": "2026-08-01",
+    "message_count": 131,
+    "output_tokens": 51637,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 2378678,
+    "cache_read_tokens": 176487060,
+    "cost_cents": 4818.0631,
+    "input_tokens": 14756,
+    "label": "2026-08-02",
+    "message_count": 694,
+    "output_tokens": 392956,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 4453319,
+    "cache_read_tokens": 308350854,
+    "cost_cents": 8600.0488,
+    "input_tokens": 10532,
+    "label": "2026-08-03",
+    "message_count": 1151,
+    "output_tokens": 719571,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 4884514,
+    "cache_read_tokens": 452367406,
+    "cost_cents": 11801.1881,
+    "input_tokens": 24231,
+    "label": "2026-08-04",
+    "message_count": 1418,
+    "output_tokens": 857868,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 4593167,
+    "cache_read_tokens": 268853720,
+    "cost_cents": 7653.3235,
+    "input_tokens": 14835,
+    "label": "2026-08-05",
+    "message_count": 915,
+    "output_tokens": 632266,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 2200059,
+    "cache_read_tokens": 152313377,
+    "cost_cents": 4203.5608,
+    "input_tokens": 974,
+    "label": "2026-08-06",
+    "message_count": 487,
+    "output_tokens": 332229,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 423348,
+    "cache_read_tokens": 34795556,
+    "cost_cents": 974.2593,
+    "input_tokens": 318,
+    "label": "2026-08-07",
+    "message_count": 159,
+    "output_tokens": 108946,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 947411,
+    "cache_read_tokens": 47254432,
+    "cost_cents": 3764.8626,
+    "input_tokens": 1401,
+    "label": "2026-08-08",
+    "message_count": 224,
+    "output_tokens": 181610,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 239118,
+    "cache_read_tokens": 12993247,
+    "cost_cents": 618.8722,
+    "input_tokens": 215,
+    "label": "2026-08-09",
+    "message_count": 111,
+    "output_tokens": 70954,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 5185414,
+    "cache_read_tokens": 302743877,
+    "cost_cents": 8771.6591,
+    "input_tokens": 9251,
+    "label": "2026-08-15",
+    "message_count": 1081,
+    "output_tokens": 793702,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 2260978,
+    "cache_read_tokens": 99751626,
+    "cost_cents": 3161.5895,
+    "input_tokens": 1225,
+    "label": "2026-08-16",
+    "message_count": 484,
+    "output_tokens": 309334,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 5100381,
+    "cache_read_tokens": 316328325,
+    "cost_cents": 8927.3901,
+    "input_tokens": 25174,
+    "label": "2026-08-17",
+    "message_count": 1052,
+    "output_tokens": 865519,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 645153,
+    "cache_read_tokens": 19693023,
+    "cost_cents": 671.6513,
+    "input_tokens": 68,
+    "label": "2026-08-18",
+    "message_count": 34,
+    "output_tokens": 19716,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 625019,
+    "cache_read_tokens": 31689506,
+    "cost_cents": 950.2058,
+    "input_tokens": 234,
+    "label": "2026-08-20",
+    "message_count": 117,
+    "output_tokens": 66362,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 1827026,
+    "cache_read_tokens": 68178636,
+    "cost_cents": 2089.1401,
+    "input_tokens": 394,
+    "label": "2026-08-21",
+    "message_count": 197,
+    "output_tokens": 144262,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 7110734,
+    "cache_read_tokens": 531757197,
+    "cost_cents": 13909.4489,
+    "input_tokens": 1810,
+    "label": "2026-08-22",
+    "message_count": 905,
+    "output_tokens": 509506,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 2336586,
+    "cache_read_tokens": 79533230,
+    "cost_cents": 2597.4996,
+    "input_tokens": 228,
+    "label": "2026-08-23",
+    "message_count": 114,
+    "output_tokens": 72155,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 2130456,
+    "cache_read_tokens": 39650231,
+    "cost_cents": 1636.8572,
+    "input_tokens": 174,
+    "label": "2026-08-24",
+    "message_count": 87,
+    "output_tokens": 39300,
+    "tool_call_count": 0
+  },
+  {
+    "cache_creation_tokens": 139120,
+    "cache_read_tokens": 2822397,
+    "cost_cents": 193.1453,
+    "input_tokens": 84,
+    "label": "2026-08-25",
+    "message_count": 42,
+    "output_tokens": 23383,
+    "tool_call_count": 0
+  }
+]

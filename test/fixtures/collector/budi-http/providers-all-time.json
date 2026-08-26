@@ -1,0 +1,28 @@
+[
+  {
+    "assistant_messages": 9627,
+    "cache_creation_tokens": 48247013,
+    "cache_read_tokens": 2987775876,
+    "display_name": "Claude Code",
+    "estimated_cost": 867.35,
+    "input_tokens": 107442,
+    "output_tokens": 6361621,
+    "provider": "claude_code",
+    "total_cost_cents": 86735.2732,
+    "total_messages": 20602,
+    "user_messages": 10975
+  },
+  {
+    "assistant_messages": 418,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 51393792,
+    "display_name": "Codex",
+    "estimated_cost": 45.86,
+    "input_tokens": 2758311,
+    "output_tokens": 216698,
+    "provider": "codex",
+    "total_cost_cents": 4586.4554,
+    "total_messages": 418,
+    "user_messages": 0
+  }
+]

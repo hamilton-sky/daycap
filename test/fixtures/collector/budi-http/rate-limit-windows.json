@@ -1,0 +1,74 @@
+{
+  "windows": [
+    {
+      "burn_rate_cents_per_minute": 374.4141686746988,
+      "cache_creation_tokens": 842781,
+      "cache_read_tokens": 8839943,
+      "cost_cents": 517.9395999999999,
+      "duration_minutes": 1.3833333333333333,
+      "ended_at": "2026-08-22T23:17:15.070+00:00",
+      "input_tokens": 22,
+      "is_active": false,
+      "message_count": 11,
+      "output_tokens": 4024,
+      "started_at": "2026-08-22T23:15:51.472+00:00",
+      "window_index": 21
+    },
+    {
+      "burn_rate_cents_per_minute": 76.29498639455782,
+      "cache_creation_tokens": 872210,
+      "cache_read_tokens": 37962609,
+      "cost_cents": 1121.5363,
+      "duration_minutes": 14.7,
+      "ended_at": "2026-08-23T07:29:42.319+00:00",
+      "input_tokens": 86,
+      "is_active": false,
+      "message_count": 43,
+      "output_tokens": 13383,
+      "started_at": "2026-08-23T07:14:59.663+00:00",
+      "window_index": 22
+    },
+    {
+      "burn_rate_cents_per_minute": 29.757324596774197,
+      "cache_creation_tokens": 1464376,
+      "cache_read_tokens": 41570621,
+      "cost_cents": 1475.9633000000001,
+      "duration_minutes": 49.6,
+      "ended_at": "2026-08-23T23:58:26.203+00:00",
+      "input_tokens": 142,
+      "is_active": false,
+      "message_count": 71,
+      "output_tokens": 58772,
+      "started_at": "2026-08-23T23:08:49.705+00:00",
+      "window_index": 23
+    },
+    {
+      "burn_rate_cents_per_minute": 7.644102739726027,
+      "cache_creation_tokens": 2130456,
+      "cache_read_tokens": 39650231,
+      "cost_cents": 1636.8572,
+      "duration_minutes": 214.13333333333333,
+      "ended_at": "2026-08-24T13:22:31.944+00:00",
+      "input_tokens": 174,
+      "is_active": false,
+      "message_count": 87,
+      "output_tokens": 39300,
+      "started_at": "2026-08-24T09:48:23.629+00:00",
+      "window_index": 24
+    },
+    {
+      "burn_rate_cents_per_minute": 5.291652054794522,
+      "cache_creation_tokens": 139120,
+      "cache_read_tokens": 2822397,
+      "cost_cents": 193.14530000000005,
+      "duration_minutes": 36.5,
+      "ended_at": "2026-08-25T13:34:38.574506+00:00",
+      "input_tokens": 84,
+      "is_active": true,
+      "message_count": 42,
+      "output_tokens": 23383,
+      "started_at": "2026-08-25T12:58:08.446+00:00",
+      "window_index": 25
+    }
+  ]
+}

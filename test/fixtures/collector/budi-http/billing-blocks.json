@@ -1,0 +1,88 @@
+[
+  {
+    "block_index": 40,
+    "burn_rate_cents_per_minute": 30.02548405797101,
+    "cache_creation_tokens": 842781,
+    "cache_read_tokens": 8839943,
+    "cost_cents": 517.9395999999999,
+    "duration_minutes": 17.25,
+    "ended_at": "2026-08-22T23:17:15.070+00:00",
+    "input_tokens": 22,
+    "is_active": false,
+    "message_count": 11,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 4024,
+    "started_at": "2026-08-22T23:00:00+00:00"
+  },
+  {
+    "block_index": 41,
+    "burn_rate_cents_per_minute": 37.762164983164986,
+    "cache_creation_tokens": 872210,
+    "cache_read_tokens": 37962609,
+    "cost_cents": 1121.5363,
+    "duration_minutes": 29.7,
+    "ended_at": "2026-08-23T07:29:42.319+00:00",
+    "input_tokens": 86,
+    "is_active": false,
+    "message_count": 43,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 13383,
+    "started_at": "2026-08-23T07:00:00+00:00"
+  },
+  {
+    "block_index": 42,
+    "burn_rate_cents_per_minute": 25.258926982316034,
+    "cache_creation_tokens": 1464376,
+    "cache_read_tokens": 41570621,
+    "cost_cents": 1475.9633000000001,
+    "duration_minutes": 58.43333333333333,
+    "ended_at": "2026-08-23T23:58:26.203+00:00",
+    "input_tokens": 142,
+    "is_active": false,
+    "message_count": 71,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 58772,
+    "started_at": "2026-08-23T23:00:00+00:00"
+  },
+  {
+    "block_index": 43,
+    "burn_rate_cents_per_minute": 6.235250587264301,
+    "cache_creation_tokens": 2130456,
+    "cache_read_tokens": 39650231,
+    "cost_cents": 1636.8572,
+    "duration_minutes": 262.51666666666665,
+    "ended_at": "2026-08-24T13:22:31.944+00:00",
+    "input_tokens": 174,
+    "is_active": false,
+    "message_count": 87,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 39300,
+    "started_at": "2026-08-24T09:00:00+00:00"
+  },
+  {
+    "block_index": 44,
+    "burn_rate_cents_per_minute": 2.040985910531878,
+    "cache_creation_tokens": 139120,
+    "cache_read_tokens": 2822397,
+    "cost_cents": 193.14530000000005,
+    "duration_minutes": 94.63333333333334,
+    "ended_at": "2026-08-25T13:34:38.565326+00:00",
+    "input_tokens": 84,
+    "is_active": true,
+    "message_count": 42,
+    "models": [
+      "claude-opus-5",
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 23383,
+    "started_at": "2026-08-25T12:00:00+00:00"
+  }
+]

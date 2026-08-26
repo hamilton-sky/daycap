@@ -1,0 +1,9 @@
+{
+  "cache_read_cost": 638.67,
+  "cache_savings": 5748.06,
+  "cache_write_cost": 124.67,
+  "input_cost": 13.92,
+  "other_cost": 62.23,
+  "output_cost": 73.38,
+  "total_cost": 912.87
+}

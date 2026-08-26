@@ -1,11 +1,28 @@
-# token-tracker
+# local-usage-meter
 
 Planning-stage repo for **LocalUsageMeter** — a local **budget guardrail** for AI coding tools.
 It reads today's spend from a usage collector already on the machine, compares it against a
 configurable daily allowance across *every* tool you use — Claude Code, Codex, Cursor, Copilot — and
 warns you before the allowance is gone. No server, no proxy, no login.
 
-> **Status: designed (v2), not built.** There is no `src/` yet.
+> **Status: P0 passed (GO), P1 started — 2026-08-25.** The collector spike is done and the verdict
+> is **GO**: see [`SPIKE_RESULT.md`](pathly/features/local-usage-meter/SPIKE_RESULT.md). budi + ccusage
+> reconcile to the cent on 21,000 real messages. `src/` now exists — the P1-0 scaffold, the domain
+> types and ports (P1-1), and the usage-day boundary with 100% branch coverage (P1-2). `pnpm verify`
+> is green. Next: `P1-3`, the `UsageSourcePort` contract suite.
+>
+> **Four gates moved on 2026-08-25.** **`PRE-G` is answered: local.** The user's wall clock defines
+> "today" — every day label, budget window and threshold is computed in the user's IANA timezone with
+> `resetHourLocal`, and UTC is never inherited from a collector's API. **`PRE-D` is answered:** this
+> repo is `local-usage-meter` (bin `lum` unchanged). **`PRE-A` is narrowed** to Claude Code + Codex +
+> Cursor, and measurement shows **Cursor exposes no local spend data at all** — its own tracking DB
+> has no token or cost column, so no local collector can price it. **The collector flipped:**
+> `ccusage@20` is primary (zero install, native `-z <IANA>`, per-tool split verified), with
+> `budi.cli.ts` kept as the second real adapter so the contract suite always runs against two real
+> implementations. `PRE-C` still needs a human to read `SPIKE_RESULT.md`, and **`PRE-F` is now the
+> next real blocker** — ccusage costs 1–3 s per call, so the snapshot cache is load-bearing rather
+> than an optimization. See
+> [`feedback/HUMAN_QUESTIONS.md`](pathly/features/local-usage-meter/feedback/HUMAN_QUESTIONS.md).
 >
 > **The design pivoted on 2026-08-24.** v1 planned to build its own usage collector for two CLIs.
 > Market research found that layer is thoroughly commoditised — [budi](https://github.com/siropkin/budi)
@@ -88,8 +105,13 @@ collector that gets them wrong reports wrong numbers, so they're worth testing b
 ## Repo layout
 
 ```
+src/domain/{types,ports,window}.ts      P1-1, P1-2 — pure: no fs, no net, no clock
+src/bin/{lum.ts,statusline.js}          entrypoints; statusline is node:fs only, always exit 0
+test/unit/                              74 tests; src/domain/** is at 100% branch coverage
+test/fixtures/collector/                17 scrubbed collector fixtures frozen by P0-5, + README
 local-usage-meter-BRIEF.md              the original seed (scope-change banner at top)
 pathly/features/local-usage-meter/
+  SPIKE_RESULT.md                       ← P0 verdict (GO), the two API traps, and PRE-G
   ARCHITECTURE_PROPOSAL.md              ← v2, CURRENT. Start here.
   archive/…-v1-own-parsers.md           v1 (927 lines), superseded — kept for its reasoning
   PO_NOTES.md                           personas, success criteria, constraints

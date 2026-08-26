@@ -1,0 +1,33 @@
+{
+  "cache_read_cost": 1.08,
+  "cache_savings": 9.74,
+  "cache_write_cost": 0.73,
+  "input_cost": 0.0,
+  "output_cost": 0.59,
+  "providers": [
+    {
+      "assistant_messages": 50,
+      "cache_creation_tokens": 155659,
+      "cache_read_tokens": 3385478,
+      "display_name": "Claude Code",
+      "estimated_cost": 2.5,
+      "input_tokens": 100,
+      "output_tokens": 30897,
+      "provider": "claude_code",
+      "total_cost_cents": 250,
+      "total_messages": 129,
+      "user_messages": 79
+    }
+  ],
+  "total_assistant_messages": 50,
+  "total_cache_creation_tokens": 155659,
+  "total_cache_read_tokens": 3385478,
+  "total_cost": 2.5,
+  "total_cost_cents": 250,
+  "total_input_tokens": 100,
+  "total_messages": 129,
+  "total_output_tokens": 30897,
+  "total_user_messages": 79,
+  "window_end": null,
+  "window_start": "2026-08-24T21:00:00+00:00"
+}

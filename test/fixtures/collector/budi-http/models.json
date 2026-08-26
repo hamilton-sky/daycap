@@ -1,0 +1,48 @@
+{
+  "limit": 30,
+  "rows": [
+    {
+      "cache_creation_tokens": 47146044,
+      "cache_read_tokens": 2935768150,
+      "cost_cents": 82499.9608,
+      "input_tokens": 105908,
+      "message_count": 9333,
+      "model": "claude-sonnet-5",
+      "output_tokens": 6135451,
+      "provider": "claude_code"
+    },
+    {
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 51367168,
+      "cost_cents": 4586.4554,
+      "input_tokens": 2739384,
+      "message_count": 414,
+      "model": "gpt-5.5",
+      "output_tokens": 216135,
+      "provider": "codex"
+    },
+    {
+      "cache_creation_tokens": 1089564,
+      "cache_read_tokens": 51672292,
+      "cost_cents": 4200.1924,
+      "input_tokens": 1524,
+      "message_count": 289,
+      "model": "claude-opus-5",
+      "output_tokens": 221684,
+      "provider": "claude_code"
+    },
+    {
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 26624,
+      "cost_cents": 0.0,
+      "input_tokens": 18927,
+      "message_count": 4,
+      "model": "codex-auto-review",
+      "output_tokens": 563,
+      "provider": "codex"
+    }
+  ],
+  "shown_rows": 4,
+  "total_cost_cents": 91286.6086,
+  "total_rows": 4
+}

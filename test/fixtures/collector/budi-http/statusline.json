@@ -1,0 +1,23 @@
+{
+  "active_block_started_at": "2026-08-25T13:32:23.063+00:00",
+  "active_provider": "claude_code",
+  "block_burn_cents_per_hour": 122.45915463191268,
+  "block_cost_cents": 193.14530000000005,
+  "block_remaining_minutes": 205.36666666666667,
+  "breakdown_by_provider": [
+    {
+      "cost_1d_cents": 193.1453,
+      "cost_30d_cents": 86092.6202,
+      "cost_7d_cents": 21376.2969,
+      "provider": "claude_code"
+    }
+  ],
+  "cost_1d": 1.9314529999999999,
+  "cost_30d": 860.9262020000001,
+  "cost_7d": 213.762969,
+  "cost_active_block_cents": 7247,
+  "cycle_elapsed_percent": 79.16666666666667,
+  "window_burn_rate": 3.174991232876713,
+  "window_remaining_minutes": 263.48333333333335,
+  "window_reset": "2026-08-25T17:58:08.446+00:00"
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "assistant_messages": 87,
+    "cache_creation_tokens": 2130456,
+    "cache_read_tokens": 39650231,
+    "display_name": "Claude Code",
+    "estimated_cost": 16.37,
+    "input_tokens": 174,
+    "output_tokens": 39300,
+    "provider": "claude_code",
+    "total_cost_cents": 1636.8572,
+    "total_messages": 177,
+    "user_messages": 90
+  }
+]

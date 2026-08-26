@@ -132,6 +132,9 @@ per §2's tree.
 **⟨contingent: PRE-D⟩** *Assumption:* bin name `lum` and config dir `~/.localusagemeter/` are kept
 (neither collides with TokenTracker). The **npm package name and the repo name are left unset** —
 `"private": true`, no publish step, until PRE-D lands.
+**⟨PRE-D landed 2026-08-25.⟩** Repo, directory and `package.json` `name` are all
+`local-usage-meter`; `lum` was unavailable on npm. `"private": true` and the absent publish step
+stand unchanged — nothing is claimed on the registry yet.
 
 **`P1-1` — Domain types and ports.** `S`
 *Files:* `src/domain/types.ts`, `src/domain/ports.ts`.
@@ -186,6 +189,11 @@ three lines in a `*.contract.test.ts` file.
 *Acceptance:* passes all 14 contract cases against the stub. Loopback only. Hard 1500 ms timeout.
 *Note:* if `P0-4` chose a different primary, this task's file changes and nothing else does — that is
 the point of §3's structural rule.
+**⟨SUPERSEDED 2026-08-25 — the primary is now `ccusage`.⟩** Per the collector decision in
+`feedback/HUMAN_QUESTIONS.md`, this task's files become `src/adapters/source/ccusage.cli.ts` /
+`test/contract/ccusage.cli.contract.test.ts` with a fake-binary stub on a temp `PATH`. The window
+is passed as a local-axis day and honoured via ccusage's native `-z <IANA>` (`PRE-G` = local).
+Everything else in this task is unchanged, which is the structural rule working as intended.
 
 **`P1-5` — Second real adapter, pulled forward from P4.** `S`
 *Goal:* from P1 onward the contract suite always runs against ≥2 **real** implementations, not one
@@ -194,6 +202,10 @@ phases. `budi.cli.ts` is cheap and is already the `P0-4` fallback.
 *Files:* `src/adapters/source/budi.cli.ts`, `test/contract/budi.cli.contract.test.ts`,
 `test/stubs/fake-budi-bin.js`.
 *Deps:* `P1-3`. *Acceptance:* passes all 14 against a fake binary on a temp `PATH`.
+**⟨2026-08-25: still required, and now the *second* adapter rather than the alternate.⟩** budi was
+demoted from primary, not dropped — `budi.cli.ts` is what keeps the contract suite running against
+two *real* implementations, which is this task's stated reason for existing. Its axis comes from
+`--timezone <IANA>`.
 
 **`P1-6` — Atomic store.** `S`
 *Files:* `src/adapters/store/atomic-json.ts`, `test/integration/store.test.ts`.

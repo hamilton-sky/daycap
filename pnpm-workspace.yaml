@@ -1,0 +1,4 @@
+# esbuild's postinstall fetches its platform binary; vitest and tsdown both need it.
+# Allowlisted explicitly so CI never prompts and no other package may run install scripts.
+allowBuilds:
+  esbuild: true

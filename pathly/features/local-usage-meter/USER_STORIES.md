@@ -343,8 +343,8 @@ step per source, in ≤ 80 columns, plain text by default.
 
 ## US-12 — The install name is not someone else's project
 
-> **Could** · Phase **P4** · **Contingent on PRE-D — a human must choose the name. This story does
-> not propose one.**
+> **Could** · Phase **P4** · **PRE-D ANSWERED 2026-08-25 — the name is `local-usage-meter`.**
+> Chosen by the human; recorded in `feedback/HUMAN_QUESTIONS.md`. This story is unblocked.
 
 **As** a developer searching for this tool,
 **I want** its name not to collide with the established Token Tracker OSS project,
@@ -353,7 +353,17 @@ step per source, in ≤ 80 columns, plain text by default.
 **Acceptance criteria (whatever the chosen name turns out to be)**
 - Binary name, config directory, package name and repository name agree.
 - A migration path exists for anyone who installed under the old name, or an explicit decision is recorded that none is needed because there are no users yet.
-- Blocked until PRE-D is answered by a human. No agent selects the name.
+- ~~Blocked until PRE-D is answered by a human.~~ **Answered 2026-08-25.** Status of the two criteria
+  above:
+  - **Names agree on the product, not literally.** Repo `local-usage-meter`, package
+    `local-usage-meter`, bin **`lum`** (abbreviation), config dir **`~/.localusagemeter/`**
+    (unhyphenated). That was already `P1-0`'s assumption and neither collides with Token Tracker, but
+    if this AC means *string-identical*, it is not met and never was — decide whether to relax the
+    wording or unify the two odd ones.
+  - **No migration path is needed, and this is that explicit decision:** the repo was two commits old
+    at rename time, nothing was ever published to npm (`"private": true`, no publish step), and there
+    are no users. `local-usage-meter` is unclaimed on npm; **`lum` is taken** by a `1.0.0-readme.0`
+    placeholder, so a future publish needs either this name or a scope.
 
 ---
 
@@ -392,7 +402,7 @@ written under a stated assumption, and the assumption is marked in the story its
 | **PRE-A** | Exact tool list. Brief says Claude Code + Codex; the persona uses Cursor too. | Human | **OPEN** | **US-01, US-05, US-08.** All three are written **ASSUMING PRE-A resolves to {Claude Code, Codex, Cursor}**. If it resolves to the brief's two tools, US-08 becomes pointless, US-05 shrinks to two rows, and the zero-install ccusage path in US-10 becomes sufficient rather than a fallback — which would materially reduce PRE-E's weight. |
 | **PRE-B** | Has anyone actually asked for this? No budget/alert issue has ever been filed on budi (Risk R4). | Human | **OPEN** | **All of them.** These stories describe a product whose demand is unvalidated. This is a gate on building, not on any individual story. |
 | **PRE-C** | Does `/analytics/*` return day-shaped per-tool spend? | Builder (one `curl`) | **OPEN — do first** | **US-01, US-05.** If the API is session-shaped rather than day-shaped, the acceptance criteria stand but the adapter changes; if per-tool attribution is unavailable, **US-05 is not buildable on that source**. |
-| **PRE-D** | Rename the project away from `token-tracker`. | Human | **OPEN** | **US-12**, which is blocked entirely. No name is proposed anywhere in this file. |
+| **PRE-D** | Rename the project away from `token-tracker`. | Human | **ANSWERED 2026-08-25 — `local-usage-meter`** (bin `lum` unchanged); see `feedback/HUMAN_QUESTIONS.md`. | **US-12** is unblocked. |
 | **PRE-E** | Is doubled install friction acceptable? The brief promised "setup is trivial"; v2 requires a 13 MB collector first (Risk R1). | Human | **OPEN** | **US-06, US-10, US-11.** All three exist to soften a cost that a human may decide is unacceptable. If PRE-E resolves to "no", the ccusage zero-install path in US-10 is promoted from **Should** to **Must** and the whole plan narrows toward Claude+Codex — which collides with PRE-A. |
 | **OPEN-F** | **New, raised by this document.** ADR-v2-003 makes rate-limit percentage the primary signal on subscriptions, but `thresholds` are evaluated only against the USD fraction (§2). **Does a threshold fire when 7-day rate-limit usage crosses 80%?** For Mira on Max, the rate limit is the binding constraint — a budget tool that only alerts on imputed dollars will not alert her at all on the thing that actually stops her working. | Human | **OPEN** | **US-02**, whose AC is deliberately written against the USD fraction only. **Not decided here.** Should be added to `feedback/HUMAN_QUESTIONS.md`. |
 | **ARCH-Q3** | Subscription threshold wording ("usage allowance" vs "budget"), decided A+C by the evaluator agent. **Never human-acknowledged.** | Human | **Decided agent-to-agent; unratified** | US-02 notification copy. Recorded, not re-decided. |

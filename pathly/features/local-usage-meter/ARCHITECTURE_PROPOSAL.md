@@ -339,7 +339,7 @@ output. v2 strengthens this — we no longer read transcripts at all.
 | **PRE-A** | **Confirm the tool list.** Brief says Claude Code + Codex. Stated target market uses Claude + Codex + **Cursor** + more. Cursor is not in the brief and cannot be served by v1's design at all. | Human | **OPEN** |
 | **PRE-B** | **Validate demand (R4).** File the budi issue; see whether anyone wants this. | Human | **OPEN** |
 | **PRE-C** | **P0 spike** — does `/analytics/*` return day-shaped per-tool spend? | Builder | **OPEN — do this first** |
-| **PRE-D** | **Rename the project.** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established OSS project doing this exact thing; this repo is currently `token-tracker`. | Human | **OPEN** |
+| **PRE-D** | **Rename the project.** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established OSS project doing this exact thing; this repo is currently `token-tracker`. | Human | **ANSWERED 2026-08-25 — `local-usage-meter`**, see `feedback/HUMAN_QUESTIONS.md` |
 | ~~PRE-1~~ | ~~Scrubbed Claude log~~ | — | **OBSOLETE** — we no longer parse logs. The fixture and its findings are kept in `fixtures/` as evidence for whoever maintains a collector. |
 | ~~PRE-10~~ | ~~ccusage constraint sign-off~~ | — | **RESOLVED BY v2** — we now reuse a whole collector, which honours the brief's reuse intent more completely than v1 did. |
 

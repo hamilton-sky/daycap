@@ -1,3 +1,10 @@
 .DS_Store
 *.log
 node_modules/
+
+# P0 spike scratch — holds UNSCRUBBED repo names and session titles.
+# Scrubbed subset is frozen in test/fixtures/collector/ (see P0-5).
+spike/
+dist/
+coverage/
+.vitest/

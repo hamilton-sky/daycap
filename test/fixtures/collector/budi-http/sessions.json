@@ -1,0 +1,107 @@
+[
+  {
+    "cost_cents": 114.7252,
+    "cost_confidence": "estimated",
+    "duration_ms": 777079,
+    "ended_at": "2026-08-25T13:34:27.355+00:00",
+    "git_branches": [],
+    "health_state": "green",
+    "id": "session-000",
+    "id_short": "sess000",
+    "input_tokens": 36,
+    "message_count": 18,
+    "models": [
+      "claude-opus-5"
+    ],
+    "output_tokens": 11524,
+    "provider": "claude_code",
+    "repo_ids": [],
+    "started_at": "2026-08-25T13:21:30.276+00:00",
+    "surface": "terminal",
+    "title": "[scrubbed]"
+  },
+  {
+    "cost_cents": 78.4201,
+    "cost_confidence": "estimated",
+    "duration_ms": 162238,
+    "ended_at": "2026-08-25T13:00:50.685+00:00",
+    "git_branches": [],
+    "health_state": "green",
+    "id": "session-001",
+    "id_short": "sess001",
+    "input_tokens": 48,
+    "message_count": 24,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 11859,
+    "provider": "claude_code",
+    "repo_ids": [],
+    "started_at": "2026-08-25T12:58:08.446+00:00",
+    "surface": "terminal",
+    "title": "[scrubbed]"
+  },
+  {
+    "cost_cents": 18143.8057,
+    "cost_confidence": "estimated",
+    "duration_ms": 191393714,
+    "ended_at": "2026-08-24T13:22:31.944+00:00",
+    "git_branches": [],
+    "health_state": "yellow",
+    "id": "session-002",
+    "id_short": "sess002",
+    "input_tokens": 2212,
+    "message_count": 1106,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 620961,
+    "provider": "claude_code",
+    "repo_ids": [],
+    "started_at": "2026-08-22T08:12:38.229+00:00",
+    "surface": "terminal",
+    "title": "[scrubbed]"
+  },
+  {
+    "cost_cents": 1065.6228,
+    "cost_confidence": "estimated",
+    "duration_ms": 1446273,
+    "ended_at": "2026-08-21T12:58:19.713+00:00",
+    "git_branches": [],
+    "health_state": "yellow",
+    "id": "session-003",
+    "id_short": "sess003",
+    "input_tokens": 202,
+    "message_count": 101,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 66294,
+    "provider": "claude_code",
+    "repo_ids": [],
+    "started_at": "2026-08-21T12:34:13.439+00:00",
+    "surface": "terminal",
+    "title": "[scrubbed]"
+  },
+  {
+    "cost_cents": 1328.1588,
+    "cost_confidence": "estimated",
+    "duration_ms": 67705938,
+    "ended_at": "2026-08-21T12:28:47.426+00:00",
+    "git_branches": [],
+    "health_state": "red",
+    "id": "session-004",
+    "id_short": "sess004",
+    "input_tokens": 286,
+    "message_count": 143,
+    "models": [
+      "claude-sonnet-5"
+    ],
+    "output_tokens": 96939,
+    "provider": "claude_code",
+    "repo_ids": [],
+    "started_at": "2026-08-20T17:40:21.488+00:00",
+    "surface": "terminal",
+    "title": "[scrubbed]"
+  }
+]

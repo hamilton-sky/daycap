@@ -1,0 +1,10 @@
+{
+  "total_assistant_messages": 10040,
+  "total_cache_creation_tokens": 48235608,
+  "total_cache_read_tokens": 3038834234,
+  "total_cost_cents": 91286.6086,
+  "total_input_tokens": 2865743,
+  "total_messages": 21008,
+  "total_output_tokens": 6573833,
+  "total_user_messages": 10968
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "assistant_messages": 10040,
+    "cache_creation_tokens": 48235608,
+    "cache_read_tokens": 3038834234,
+    "estimated_cost": 912.87,
+    "input_tokens": 2865743,
+    "output_tokens": 6573833,
+    "surface": "terminal",
+    "total_cost_cents": 91286.6086,
+    "total_messages": 21008,
+    "user_messages": 10968
+  }
+]
