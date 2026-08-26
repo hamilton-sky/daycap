@@ -49,8 +49,16 @@ export type CaseId =
 export type StartedSource = {
   source: UsageSourcePort;
   stop(): Promise<void>;
-  /** PID of a spawned collector, when there is one. C11b asserts it gets killed on timeout. */
-  pid?: number;
+  /**
+   * PID of the collector process currently in flight, or undefined.
+   *
+   * A function rather than a value because a shell-out adapter does not spawn anything until
+   * `spendFor` is called — there is no pid to report at `start()` time. C11b polls this.
+   * Absent entirely on harnesses that never fork.
+   */
+  inFlightPid?(): number | undefined;
+  /** Kill the in-flight collector. C11b wires this to `withTimeout`'s `onTimeout`. */
+  killInFlight?(): void;
 };
 
 export type StartOptions = {
