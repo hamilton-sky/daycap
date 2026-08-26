@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const statusline = resolve(root, "src/bin/statusline.js");
@@ -10,6 +12,22 @@ const statusline = resolve(root, "src/bin/statusline.js");
  * These run in a child process on purpose. Both invariants are about what the MODULE does at load
  * time and what the PROCESS exits with — neither is observable from inside the importing test.
  */
+/**
+ * Every case runs against a temp HOME.
+ *
+ * These originally leaked the developer's real home directory, and passed only because render()
+ * was a stub that ignored its input. The moment render() became real they failed — correctly —
+ * by picking up an actual snapshot. A test whose result depends on whose machine it runs on is
+ * not a test.
+ */
+let home: string;
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), "lum-sl-"));
+});
+afterEach(() => rmSync(home, { recursive: true, force: true }));
+
+const env = () => ({ ...process.env, HOME: home, USERPROFILE: home, NO_COLOR: "1" });
+
 describe("statusline.js", () => {
   it("writes nothing to stdout when merely imported", () => {
     // Regression: it used to call main() at module top level, so importing it to table-test
@@ -24,19 +42,20 @@ describe("statusline.js", () => {
         // specifiers and fail with ERR_UNSUPPORTED_ESM_URL_SCHEME.
         `await import(${JSON.stringify(pathToFileURL(statusline).href)});`,
       ],
-      { encoding: "utf8" },
+      { encoding: "utf8", env: env() },
     );
     expect(out).toBe("");
   });
 
   it("still renders and exits 0 when executed directly", () => {
-    const out = execFileSync(process.execPath, [statusline], { encoding: "utf8" });
+    const out = execFileSync(process.execPath, [statusline], { encoding: "utf8", env: env() });
     expect(out.trim()).toBe("lum — (no source)");
   });
 
   it("exits 0 even when handed malformed stdin — the prompt must never break", () => {
     const out = execFileSync(process.execPath, [statusline], {
       encoding: "utf8",
+      env: env(),
       input: '{"not":"valid json',
     });
     expect(out.trim()).toBe("lum — (no source)");

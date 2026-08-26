@@ -5,7 +5,6 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
-
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -16,12 +15,11 @@
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    // Source imports carry explicit .ts extensions; tsdown/rolldown rewrites them on build.
     "allowImportingTsExtensions": true,
-
     "noEmit": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "*.config.ts"],
   "exclude": ["dist", "node_modules"]

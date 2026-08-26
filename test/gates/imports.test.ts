@@ -50,8 +50,22 @@ const FORBIDDEN_MODULES = [
   "fs-extra",
 ];
 
-/** Private data directories belonging to the CLIs we measure. Reading them IS parsing. */
-const FORBIDDEN_PATHS = [".claude", ".codex", ".cursor", ".copilot", ".jsonl"];
+/**
+ * Transcript and usage DATA belonging to the CLIs we measure. Reading it IS parsing.
+ *
+ * Note what is forbidden and what is not. `~/.claude/projects` holds transcripts — off limits,
+ * that is the whole of ADR-v2-001. `~/.claude/settings.json` is the user's CONFIGURATION, and
+ * `lum install` writes to it on an explicit `--write`; forbidding that would forbid the installer.
+ *
+ * This distinction was NOT in the original list, and this gate is what forced it into the open:
+ * it failed on `lum.ts` the moment the installer landed. The narrow allowance below is the point
+ * — "never touch .claude" was the wrong rule, stated too broadly, and would have been loosened
+ * carelessly under deadline if the gate had not made someone write down why.
+ */
+const FORBIDDEN_PATHS = [".claude/projects", ".codex/sessions", ".cursor", ".copilot", ".jsonl"];
+
+/** The one path under a CLI's directory we may touch, and only to write the user's own settings. */
+const ALLOWED_PATHS = [".claude", "settings.json"];
 
 describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => {
   it("finds source files to check", () => {
@@ -72,6 +86,16 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
       offenders.map((f) => relative(root, f)),
       `${frag} belongs to a collector's private data. Consuming a collector means asking it, not reading its files.`,
     ).toEqual([]);
+  });
+
+  it("the settings.json allowance is narrow — only the installer may name .claude at all", () => {
+    const namers = FILES.filter((f) => code(readFileSync(f, "utf8")).includes(".claude"));
+    // If a second file ever needs this, that is a design conversation, not a quiet edit.
+    expect(namers.map((f) => relative(root, f))).toEqual(["src/bin/lum.ts"]);
+    const installer = code(readFileSync(join(SRC, "bin", "lum.ts"), "utf8"));
+    // ...and only ever joined with settings.json, never with a transcript directory.
+    expect(installer).toContain(ALLOWED_PATHS[1]);
+    expect(installer).not.toContain("projects");
   });
 
   it("nothing under src/ imports from test/", () => {
