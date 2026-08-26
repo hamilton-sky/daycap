@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -40,6 +40,15 @@ function code(text: string): string {
 
 const FILES = sourceFiles(SRC);
 
+/**
+ * Repo-relative path with POSIX separators.
+ *
+ * Windows produces `src\bin\lum.ts` where every other platform produces `src/bin/lum.ts`, so an
+ * assertion naming a path fails there for a reason that has nothing to do with the rule. Every
+ * comparison in this file goes through here.
+ */
+const rel = (f: string): string => relative(root, f).split(sep).join("/");
+
 /** Modules that only make sense if you are watching or parsing transcripts yourself. */
 const FORBIDDEN_MODULES = [
   "node:readline",
@@ -77,13 +86,13 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
       const c = code(readFileSync(f, "utf8"));
       return new RegExp(`(from|require\\()\\s*["'\`]${mod.replace(".", "\\.")}["'\`]`).test(c);
     });
-    expect(offenders.map((f) => relative(root, f))).toEqual([]);
+    expect(offenders.map(rel)).toEqual([]);
   });
 
   it.each(FORBIDDEN_PATHS)("no file under src/ references the path fragment %s", (frag) => {
     const offenders = FILES.filter((f) => code(readFileSync(f, "utf8")).includes(frag));
     expect(
-      offenders.map((f) => relative(root, f)),
+      offenders.map(rel),
       `${frag} belongs to a collector's private data. Consuming a collector means asking it, not reading its files.`,
     ).toEqual([]);
   });
@@ -91,7 +100,7 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
   it("the settings.json allowance is narrow — only the installer may name .claude at all", () => {
     const namers = FILES.filter((f) => code(readFileSync(f, "utf8")).includes(".claude"));
     // If a second file ever needs this, that is a design conversation, not a quiet edit.
-    expect(namers.map((f) => relative(root, f))).toEqual(["src/bin/lum.ts"]);
+    expect(namers.map(rel)).toEqual(["src/bin/lum.ts"]);
     const installer = code(readFileSync(join(SRC, "bin", "lum.ts"), "utf8"));
     // ...and only ever joined with settings.json, never with a transcript directory.
     expect(installer).toContain(ALLOWED_PATHS[1]);
@@ -102,14 +111,14 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
     const offenders = FILES.filter((f) =>
       /(from|require\()\s*["'`][^"'`]*\btest\//.test(code(readFileSync(f, "utf8"))),
     );
-    expect(offenders.map((f) => relative(root, f))).toEqual([]);
+    expect(offenders.map(rel)).toEqual([]);
   });
 
   it("src/domain stays pure — no node: imports at all", () => {
     const domain = FILES.filter((f) => f.includes(join("src", "domain")));
     expect(domain.length).toBeGreaterThan(3);
     const offenders = domain.filter((f) => /["'`]node:/.test(code(readFileSync(f, "utf8"))));
-    expect(offenders.map((f) => relative(root, f))).toEqual([]);
+    expect(offenders.map(rel)).toEqual([]);
   });
 
   it("statusline.js imports node:fs, node:os, node:path and node:url — and nothing else", () => {
