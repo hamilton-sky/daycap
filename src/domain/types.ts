@@ -86,6 +86,14 @@ export type UsageSnapshot = {
   generatedAtUtc: string;
   sourceId: string;
   sourceFresh: boolean;
+  /**
+   * The collector's own watermark — how current ITS data is — or `null` when it does not expose
+   * one (ccusage does not). Distinct from `generatedAtUtc`, which is when WE last asked.
+   *
+   * Both matter and they fail differently: a fresh snapshot built from a collector that stopped
+   * ingesting an hour ago looks current and is not. `lum doctor` prints both.
+   */
+  sourceLastUpdatedUtc: string | null;
   health: SourceHealth;
   tools: readonly ToolSpend[];
   /**
