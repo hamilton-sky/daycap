@@ -53,7 +53,7 @@ const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
  * backoff is the standard fix and preserves atomicity: each attempt is still all-or-nothing, we
  * simply wait for the reader to let go.
  */
-async function renameWithRetry(tmp: string, target: string, attempts = 12): Promise<void> {
+async function renameWithRetry(tmp: string, target: string, attempts = 40): Promise<void> {
   for (let i = 0; ; i++) {
     try {
       await rename(tmp, target);
@@ -62,7 +62,7 @@ async function renameWithRetry(tmp: string, target: string, attempts = 12): Prom
       const code = errnoOf(err);
       if (i >= attempts - 1 || code === undefined || !RENAME_RETRY_CODES.has(code)) throw err;
       // 1ms, 2, 4, 8... capped. Windows typically releases the handle within a few ms.
-      await sleep(Math.min(2 ** i, 25));
+      await sleep(Math.min(2 ** i, 50));
     }
   }
 }

@@ -69,6 +69,11 @@ describe("AtomicFileStore — atomicity", () => {
           tag: string;
           filler: string;
         } | null;
+        // Yield between reads. Without it the target is held open essentially continuously, and on
+        // Windows — where rename-over-an-open-file fails with EPERM — no retry budget can ever find
+        // a gap. The test is meant to discriminate atomicity, not to model a workload `lum` never
+        // produces: it writes this file once per invocation, not hundreds of times a second.
+        await new Promise((r) => setTimeout(r, 1));
         if (v !== null) {
           // A torn file would parse as garbage or truncate the filler.
           expect(v.filler.length).toBe(256 * 1024);
