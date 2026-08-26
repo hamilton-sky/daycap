@@ -115,7 +115,16 @@ export function parseConfig(raw: unknown): ConfigResult {
 
   const notifications = raw.notifications;
   if (isRecord(notifications) && typeof notifications.enabled === "boolean") {
-    cfg.notifications = { enabled: notifications.enabled };
+    const command = stringArray(notifications.command);
+    cfg.notifications =
+      command === null
+        ? { enabled: notifications.enabled }
+        : { enabled: notifications.enabled, command };
+    if (command === null && notifications.command !== undefined) {
+      warnings.push(
+        "notifications.command must be a non-empty array of strings; using the OS default",
+      );
+    }
   } else if (notifications !== undefined) {
     warnings.push("notifications must be { enabled: boolean }; notifications off");
   }

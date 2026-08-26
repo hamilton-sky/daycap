@@ -11,10 +11,12 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { NullNotifier, OsNotifier } from "../adapters/notify/notifier.ts";
 import { renderToday } from "../adapters/render/table.ts";
 import { CcusageSource } from "../adapters/source/ccusage.shellout.ts";
 import { withTimeout } from "../adapters/source/timeout.ts";
 import { AtomicFileStore, defaultStateDir } from "../adapters/store/atomic.ts";
+import { runAlerts } from "../app/alert.ts";
 import { buildSnapshot, SNAPSHOT_KEY } from "../app/meter.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
@@ -88,6 +90,26 @@ export async function runToday(home: string = homedir()): Promise<number> {
     if (cached !== null && cached.schema === 1) {
       snapshot = { ...cached, health: snapshot.health };
     }
+  }
+
+  // P2-5. Runs BEFORE rendering so that a crossing is latched and notified even if the render
+  // path somehow fails — and it never throws: an alerting fault must not cost the user the number.
+  try {
+    await runAlerts({
+      snapshot,
+      config,
+      store,
+      notifier: config.notifications.enabled
+        ? new OsNotifier(
+            config.notifications.command === undefined
+              ? {}
+              : { command: config.notifications.command },
+          )
+        : new NullNotifier(),
+      nowIso: new Date(clock.nowMs()).toISOString(),
+    });
+  } catch {
+    // Alerting is best-effort. `lum doctor` reports latch health (P4-4).
   }
 
   const lines = renderToday(snapshot, config, {

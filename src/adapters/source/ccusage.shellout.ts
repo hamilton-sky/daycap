@@ -54,6 +54,12 @@ function defaultResolveBinary(binPath?: string): ResolvedBinary | null {
   if (binPath !== undefined && binPath.length > 0) {
     return { command: binPath, prefixArgs: [] };
   }
+  // Tier 0: an explicit override. Real users need this for a non-standard install; the restart
+  // test needs it to make spend controllable across separate processes.
+  const fromEnv = process.env.LUM_CCUSAGE_BIN;
+  if (fromEnv !== undefined && fromEnv.length > 0) {
+    return { command: fromEnv, prefixArgs: [] };
+  }
   const require = createRequire(import.meta.url);
   for (const pkg of PLATFORM_PACKAGES) {
     try {
@@ -208,6 +214,9 @@ export class CcusageSource implements UsageSourcePort {
           env: {
             PATH: process.env.PATH ?? "",
             HOME: process.env.HOME ?? "",
+            ...(process.env.LUM_FAKE_TOTAL === undefined
+              ? {}
+              : { LUM_FAKE_TOTAL: process.env.LUM_FAKE_TOTAL }),
             ...(process.env.SystemRoot === undefined ? {} : { SystemRoot: process.env.SystemRoot }),
           },
         },

@@ -61,6 +61,32 @@ if (MODE === "hanging") {
   // non-functional `--by-agent`.
   const MODEL = { "claude-code": "claude-opus-5", codex: "gpt-5.6-terra" };
 
+  // A fixed total for the requested day. Lets a separate-process restart test control spend
+  // exactly, which the corpus (fixed historical dates) cannot do for "today".
+  const forced = process.env.LUM_FAKE_TOTAL;
+  if (forced !== undefined) {
+    const period = since
+      ? `${since.slice(0, 4)}-${since.slice(4, 6)}-${since.slice(6, 8)}`
+      : "1970-01-01";
+    const cost = Number(forced);
+    process.stdout.write(
+      JSON.stringify({
+        daily: [
+          {
+            period,
+            agent: "all",
+            totalCost: cost,
+            modelsUsed: ["claude-opus-5"],
+            modelBreakdowns: [{ modelName: "claude-opus-5", cost }],
+            metadata: { agents: ["claude"] },
+          },
+        ],
+        totals: { totalCost: cost },
+      }),
+    );
+    process.exit(0);
+  }
+
   const days = new Map();
   for (const row of corpus.rows) {
     const day = row.at.slice(0, 10); // corpus windows are UTC

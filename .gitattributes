@@ -1,0 +1,15 @@
+# Normalise line endings to LF in the working tree on EVERY platform.
+#
+# Without this, Git's default `core.autocrlf=true` on Windows checks the tree out with CRLF, and
+# biome's formatter — which emits LF — then reports every single file as misformatted. That is
+# exactly how the Windows CI leg failed on PR #2: 37 errors, one per file, each a whole-file diff
+# whose only difference was an invisible carriage return.
+#
+# This is the fix rather than relaxing the formatter, because the formatter was right: the repo's
+# committed content is LF and should stay LF wherever it is checked out.
+* text=auto eol=lf
+
+# Binary-ish files that must never be touched.
+*.png binary
+*.jpg binary
+*.pdf binary

@@ -128,7 +128,15 @@ export type Config = {
   tools: readonly string[];
   primarySignal: PrimarySignal;
   pacing: boolean;
-  notifications: { enabled: boolean };
+  notifications: {
+    enabled: boolean;
+    /**
+     * A user-supplied argv array, e.g. `["terminal-notifier","-title","{title}"]`. `{title}` and
+     * `{body}` are substituted. An argv ARRAY, never a shell string — the text is derived from
+     * collector output, and a shell would make a tool id an injection vector.
+     */
+    command?: readonly string[];
+  };
   /**
    * IANA zone defining the usage day. `null` = the host's local zone.
    *
@@ -139,10 +147,18 @@ export type Config = {
   timezone: string | null;
 };
 
-export type BudgetState = "under" | "amber" | "over";
+/**
+ * `unknown` is deliberate, and is a change from the task's literal wording of `ok`.
+ *
+ * With no budget configured there is nothing to be under. Reporting `ok` asserts a safety we
+ * cannot vouch for — the same error as rendering an unknown total as `$0.00`, which DoD #3
+ * forbids. `unknown` renders as an absence; `ok` would render as reassurance.
+ */
+export type BudgetState = "unknown" | "under" | "amber" | "over";
 
 export type BudgetVerdict = {
-  fraction: number;
+  /** `null` when the signal cannot be evaluated — no budget set, or spend unknown. */
+  fraction: number | null;
   state: BudgetState;
   /** Thresholds crossed by this evaluation, ascending. */
   crossed: readonly Threshold[];
