@@ -206,7 +206,18 @@ That is the drain order — no separate scheduler needed.
 - **`P4-2`** — **retracted** 2026-08-27, and `P4-3`'s dependency repointed at `P1-5`. §6 cut it with
   the words "two real adapters is the bar; ccusage + jsonfile meets it", and `P1-5` delivered
   jsonfile — so the cut's own precondition was met and the edge was the only thing keeping it alive.
-- **`P4-6`** — release. **Human-blocked** on `PRE-B` and `PRE-D`. The only task left.
+- **`P4-6`** — release. **Human-blocked** on `PRE-B`. The only task left.
+
+  **Pre-release step, because CI cannot do it.** No CI leg asserts the absolute 150ms statusline
+  budget any more — layer C calibrates against the runner's own boot, which is the only honest thing
+  a shared runner can measure. Assert the real number on a quiet machine and record the result:
+
+  ```bash
+  DAYCAP_PERF=1 npx vitest run test/gates/statusline-latency
+  ```
+
+  Log the date, the machine and layer D's four numbers here when you do. A budget nobody checks is
+  not a budget.
 
 ---
 

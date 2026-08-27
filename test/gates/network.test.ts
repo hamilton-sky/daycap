@@ -73,8 +73,38 @@ describe("gate: statusline.js opens no socket at all", () => {
     },
   );
 
+  /**
+   * The child-process ban, applied to CODE rather than to prose.
+   *
+   * WHY COMMENTS ARE STRIPPED HERE, because this is a gate being loosened and the house rule is that
+   * a loosening carries its reasoning in the same commit:
+   *
+   * This fired on a comment. The latency gate's own explanation of what it measures said the file's
+   * fs cost "was measured nowhere except through a whole process spawn" — a true sentence about why
+   * this file must not do that, and the gate rejected it. `test/gates/imports.test.ts` already
+   * strips comments for exactly this case and states the principle: "a gate that forbids explaining
+   * itself is a gate people delete." This one simply never got the same treatment.
+   *
+   * The ban on the BEHAVIOUR is unchanged — `code()` removes comments and nothing else, so any real
+   * `spawn(` or `child_process` import still fails, and the mutation check below proves it.
+   */
+  const code = (t: string): string =>
+    t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
   it("does not spawn a child process either", () => {
-    expect(text).not.toContain("child_process");
-    expect(text).not.toContain("spawn");
+    const stripped = code(text);
+    expect(stripped).not.toContain("child_process");
+    expect(stripped).not.toContain("spawn");
+  });
+
+  it("...and the ban still bites on real code, not just on prose", () => {
+    // Mutation check, in memory rather than by planting a spawn in src/: a crash mid-test would
+    // otherwise strand the repo with a real child_process call committed to the hot path.
+    const real = 'import { spawnSync } from "node:child_process";\nspawnSync("ls");';
+    expect(code(real)).toContain("child_process");
+    expect(code(real)).toContain("spawn");
+    // And the case that made this change necessary now passes.
+    const prose = "// measured nowhere except through a whole process spawn\nconst x = 1;";
+    expect(code(prose)).not.toContain("spawn");
   });
 });

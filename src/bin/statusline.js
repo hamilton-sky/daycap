@@ -175,7 +175,15 @@ export function render(snapshot, opts = {}) {
 // I/O — everything below is the thin shell around the pure functions above.
 // ---------------------------------------------------------------------------------------------
 
-function readJson(path) {
+/**
+ * Exported ONLY so the latency gate can time the real read path.
+ *
+ * `IMPLEMENTATION_PLAN.md:394` specifies layer A as "read cache + parse stdin + format", but the
+ * test could only reach `render`, so the two `readFileSync` calls — the only I/O this hot path does
+ * — were timed nowhere except through a whole process spawn. Exporting it is a smaller cost than
+ * leaving the one platform-sensitive part of the path unmeasured.
+ */
+export function readJson(path) {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8"));
     return parsed !== null && typeof parsed === "object" ? parsed : null;
