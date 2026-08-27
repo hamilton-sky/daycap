@@ -101,3 +101,68 @@ describe("parseConfig — field validation", () => {
     expect(parseConfig({ someKeyFromV3: 1 }).warnings).toEqual([]);
   });
 });
+
+/**
+ * P4-3. `source` was parsed but unread until now, so these keys had no consequences; from this
+ * commit they choose which collector every number comes from.
+ */
+describe("config — source selection keys (P4-3)", () => {
+  it("accepts the three live source names", () => {
+    for (const s of ["auto", "ccusage", "jsonfile"]) {
+      // jsonfile gets a path: without one it warns, and rightly so — asserted separately below.
+      // The first draft of this case omitted it and failed, which is the warning doing its job.
+      const r = parseConfig(
+        s === "jsonfile" ? { source: s, sourceFile: "/x.json" } : { source: s },
+      );
+      expect(r.config.source).toBe(s);
+      expect(r.warnings).toEqual([]);
+    }
+  });
+
+  it.each([
+    ["budi", "P0-4"],
+    ["tokentracker", "BUILD_PLAN_v3"],
+  ])("tells a user carrying %s what actually happened to it", (name, marker) => {
+    // Not "unknown source". A config naming budi is not a typo — it is a config written against a
+    // plan that changed underneath it, and naming the change is the difference between editing one
+    // key and wondering whether the file is being read at all.
+    const r = parseConfig({ source: name });
+    expect(r.config.source).toBe("auto");
+    expect(r.warnings.join(" ")).toContain("no longer exists");
+    expect(r.warnings.join(" ")).toContain(marker);
+  });
+
+  it("still says plain 'unknown' for something that was never a source", () => {
+    const r = parseConfig({ source: "postgres" });
+    expect(r.warnings.join(" ")).toContain("unknown source");
+    expect(r.warnings.join(" ")).not.toContain("no longer exists");
+  });
+
+  it("reads sourceFile, trimming it", () => {
+    expect(parseConfig({ sourceFile: "  /Users/alice/usage.json " }).config.sourceFile).toBe(
+      "/Users/alice/usage.json",
+    );
+  });
+
+  it("defaults sourceFile to null, which is what makes jsonfile not a candidate", () => {
+    expect(parseConfig({}).config.sourceFile).toBeNull();
+  });
+
+  it("warns on a non-string sourceFile rather than coercing it", () => {
+    const r = parseConfig({ sourceFile: 42 });
+    expect(r.config.sourceFile).toBeNull();
+    expect(r.warnings.join(" ")).toContain("sourceFile must be");
+  });
+
+  it("accepts a sourceFile alongside source: ccusage without complaint", () => {
+    // A path that is set but unused is not an error — it is a path that becomes live if they switch
+    // one key. Refusing it would make changing `source` a two-key edit.
+    const r = parseConfig({ source: "ccusage", sourceFile: "/x.json" });
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("catches the one combination that cannot work, at parse time", () => {
+    const r = parseConfig({ source: "jsonfile" });
+    expect(r.warnings.join(" ")).toContain("sourceFile is not set");
+  });
+});

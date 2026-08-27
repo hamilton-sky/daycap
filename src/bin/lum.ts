@@ -15,7 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { NullNotifier, OsNotifier } from "../adapters/notify/notifier.ts";
 import { type DoctorFacts, renderDoctor } from "../adapters/render/doctor.ts";
 import { renderToday } from "../adapters/render/table.ts";
-import { CcusageSource } from "../adapters/source/ccusage.shellout.ts";
+import { resolveSource, UnavailableSource } from "../adapters/source/resolve.ts";
 import { withTimeout } from "../adapters/source/timeout.ts";
 import { AtomicFileStore, defaultStateDir } from "../adapters/store/atomic.ts";
 import { runAlerts } from "../app/alert.ts";
@@ -24,6 +24,7 @@ import { isLatchState, LATCH_KEY, type LatchState } from "../app/latch.ts";
 import { buildSnapshot, SNAPSHOT_KEY, snapshotAgeSeconds } from "../app/meter.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
+import { markerDirFor, UNPRICEABLE_TOOLS } from "../domain/surfaces.ts";
 import type { UsageSnapshot } from "../domain/types.ts";
 
 const VERSION = "0.0.0";
@@ -130,7 +131,11 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
   const { config, warnings } = parseConfigText(configText);
 
   const store = new AtomicFileStore(defaultStateDir(home));
-  const collector = new CcusageSource();
+
+  // P4-3. Doctor runs the SAME resolver the real commands run, rather than reporting on a collector
+  // it constructed for itself. A diagnostic that probes differently from the thing it diagnoses is
+  // how "works in doctor, broken in today" happens.
+  const resolved = await resolveSource(config);
 
   const snapshot = await store.read<UsageSnapshot>(SNAPSHOT_KEY).catch(() => null);
 
@@ -165,11 +170,21 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
           ),
         };
 
+  // P5-3. Existence only — we never look INSIDE a marker directory, which is the whole reason this
+  // is allowed to exist at all (`domain/surfaces.ts` has the argument). Detection lives here
+  // because `renderDoctor` is pure and this is the composition root; it is also cheap enough to sit
+  // in a diagnostic that deliberately does no I/O of its own beyond reading what is already cached.
+  const unpriceableFound = UNPRICEABLE_TOOLS.filter((tool) =>
+    existsSync(join(home, markerDirFor(tool))),
+  );
+
   const { lines, exitCode } = renderDoctor({
     home,
-    sourceId: collector.id,
-    attempts: collector.probe(),
-    available: await collector.available(),
+    sourceId: resolved.selection.chosen ?? config.source,
+    attempts: attemptsFor(resolved),
+    available: resolved.selection.chosen !== null,
+    selection: resolved.selection,
+    probes: resolved.probes,
     snapshot,
     snapshotAgeSeconds: snapshot === null ? null : snapshotAgeSeconds(snapshot, Date.now()),
     latch,
@@ -177,6 +192,7 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
     configPath: configText === null ? `${configPath} (absent, using defaults)` : configPath,
     configWarnings: warnings,
     echoSeen: echoSeen !== null && Number.isFinite(echoSeen.ageSeconds) ? echoSeen : null,
+    unpriceableFound,
   });
   process.stdout.write(`${lines.join("\n")}\n`);
   return exitCode;
@@ -259,12 +275,24 @@ async function wire(home: string) {
     timezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
   };
   const store = new AtomicFileStore(defaultStateDir(home));
-  const collector = new CcusageSource();
-  const source = withTimeout(collector, SOURCE_TIMEOUT_MS, {
+
+  // P4-3. `auto` by default, so the common case is unchanged; an explicit `source:` is honoured and
+  // a named-but-missing source resolves to null rather than quietly becoming the other one.
+  const resolved = await resolveSource(config);
+  // A source that could not be selected becomes a source that is down, so `app/` keeps exactly one
+  // shape and the existing nine-row degradation matrix handles this without a tenth row.
+  const chosen =
+    resolved.source ??
+    new UnavailableSource(
+      config.source === "auto" ? "auto" : config.source,
+      resolved.probes.map((pr) => `${pr.id}: ${pr.where}`),
+    );
+  const source = withTimeout(chosen, SOURCE_TIMEOUT_MS, {
     // Without this a timed-out ccusage keeps reading the corpus after we have stopped waiting.
-    onTimeout: () => collector.killInFlight(),
+    // A no-op for jsonfile, which spawns nothing.
+    onTimeout: () => resolved.killInFlight(),
   });
-  return { config, clock, store, collector, source };
+  return { config, clock, store, resolved, source };
 }
 
 function notifierFor(config: { notifications: { enabled: boolean; command?: readonly string[] } }) {
@@ -363,4 +391,23 @@ if (isDirectInvocation()) {
       process.exitCode = 70; // EX_SOFTWARE
     },
   );
+}
+
+/**
+ * The resolution ladder to show for the CHOSEN source.
+ *
+ * ccusage has a real four-tier ladder worth printing — "looked for @ccusage/ccusage-darwin-arm64 in
+ * node_modules, then ccusage on PATH" is what tells someone what to install. jsonfile has exactly
+ * one place it could be, so its ladder is one rung. Both go through the same field so the renderer
+ * does not branch on which adapter won.
+ */
+function attemptsFor(resolved: Awaited<ReturnType<typeof resolveSource>>): DoctorFacts["attempts"] {
+  const probe = resolved.probes.find((p) => p.id === resolved.selection.chosen);
+  if (probe === undefined) {
+    // Nothing was chosen. The renderer prints the `selected` block instead of a ladder in that
+    // case, because that block already lists every candidate with an accurate mark — so handing it
+    // rungs here would only give it a second, worse copy of the same list.
+    return [];
+  }
+  return [{ where: probe.where, found: probe.available, detail: probe.where }];
 }

@@ -1,7 +1,15 @@
 # HANDOFF — local-usage-meter (`lum`)
 
-**State as of 2026-08-27.** `main` @ `dbda28a`. 483 tests passing, 10 skipped, CI green on macOS,
-Linux and Windows. Everything is merged; there are no open PRs and no unmerged branches.
+**State as of 2026-08-27.** 636 tests passing, 12 skipped locally. `main` @ `00d0dfb`; five further
+commits sit unpushed on `feat/p5-3-cursor-doctor` (P3-4 flake fix, P5-3, this file, P1-5, P4-3) and
+have NOT been through CI on Linux or Windows yet — that is the one gap between "works" and "shipped".
+
+**Every board task is done except `P4-6` (release), which no agent can start:** it is contingent on
+PRE-B (is there demand?) and PRE-D (what is it called?). The code is feature-complete.
+
+Four `feat/*` branches survive on the remote and none are live work: three are squash-merged, and
+`feat/p5-multi-tool-parity` forked before #9 and is BEHIND main — it holds `.prompts/` and nothing
+else worth keeping.
 
 Read this first, then `pathly/features/local-usage-meter/BUILD_PLAN_v3.md` for the design rationale.
 
@@ -34,6 +42,11 @@ node dist/lum.js doctor            # why the number is what it is
 Six commands: `today`, `doctor`, `refresh`, `install [--write] [--guard] [--codex]`,
 `--version`, `--help`.
 
+**Two collectors, and a way in for any third.** `source: auto|ccusage|jsonfile` (P4-3). `auto` walks
+jsonfile then ccusage; naming one turns the fallback OFF on purpose. `jsonfile` + `sourceFile` is the
+escape hatch — produce JSON however you like and `lum today` counts it, including for tools no
+adapter has heard of.
+
 ---
 
 ## 3. Architecture, and why each piece is shaped that way
@@ -44,11 +57,15 @@ src/domain/          PURE. No fs, no net, no clock. Enforced by biome + test/gat
   window.ts          the usage-day boundary. 100% branch coverage, DST-verified
   budget.ts          evaluate(Signal, cfg) — takes a SIGNAL, not a USD number (see §6, OPEN-F)
   config.ts          parsing; never throws; honours v1 key aliases
+  source-selection.ts P4-3 policy. PURE. Deterministic order; no silent fallback
+  surfaces.ts        P5-3. Tools that can be noticed but never priced
   errors.ts          typed failure channels, so nothing matches on stack strings
   ports.ts           UsageSourcePort + granularity
 
 src/adapters/
   source/ccusage.shellout.ts   ONE spawn. Per-tool split from modelBreakdowns[].modelName
+  source/jsonfile.ts           P1-5. The user's own JSON. `instant` granularity, schema-validated
+  source/resolve.ts            P4-3. Probes candidates; UnavailableSource when none is usable
   source/timeout.ts            withTimeout — rejects, never resolves []
   store/atomic.ts              tmp -> fsync -> rename, with a Windows retry
   render/table.ts              `lum today`
@@ -103,7 +120,7 @@ guard**. Our collector read is ~90 ms warm and ~1 s cold — either would silent
 
 | | Claude Code | Codex | Cursor |
 |---|---|---|---|
-| `lum today` / `doctor` / notifications | ✅ | ✅ **verified on real data** | ❌ |
+| `lum today` / `doctor` / notifications | ✅ | ✅ **verified on real data** | ❌ *named, never priced* |
 | statusline | ✅ | ❌ **never** — see below | ❌ |
 | guard (enforcement) | ✅ | ✅ *weaker guarantee* — see below | ❌ |
 
@@ -126,7 +143,10 @@ guardrail, not a complete enforcement boundary". Do not flatten them into one cl
   render into that footer. This is schema-level, like Cursor's spend data: a ceiling, not a gap.
   `lum doctor` now says so on its `surfaces` row rather than leaving it to be discovered.
 - **Cursor exposes no local spend data at all** — schema-level, not empty-on-this-machine. It can
-  never be priced from disk. `P5-3` makes `doctor` say so out loud instead of silently omitting it.
+  never be priced from disk. `P5-3` closed this: `doctor` now prints an `unpriced` row when Cursor
+  is present rather than silently omitting it. Detection is existence-only, keyed on the tool NAME
+  via `domain/surfaces.ts` so the literal `.cursor` still never appears in `src/` — and the import
+  gate was narrowed in the same commit to stop that derivation becoming a way around it.
 
 Everything above is sourced in `pathly/features/local-usage-meter/P5_RESEARCH.md`.
 
@@ -175,14 +195,16 @@ That is the drain order — no separate scheduler needed.
 
 ### Remaining goals
 
-- **`p5-multi-tool-parity`** (new, 2026-08-27) — `P5-1` … `P5-5`. Start with `P5-1`; `P5-2` depends
-  on it. `P5-3`, `P5-4`, `P5-5` are independent and can go in any order.
-- **`P1-5`** — a second real adapter (`jsonfile.ts`). Makes collector-swappability real rather than
-  claimed; it is the escape hatch for any collector we have not adapted.
-- **`P4-3`** — source selection (`source: auto|ccusage|jsonfile`). Depends on `P1-5`.
-- **`P4-2`** — `tokentracker.ts`. **Cut** from v1 (BUILD_PLAN_v3 §6) but still `pending` on the board
-  because `P4-3` depends on it; retract it *and* fix that edge together, or leave both.
-- **`P4-6`** — release. **Human-blocked** on `PRE-B` and `PRE-D`.
+- **`p5-multi-tool-parity`** — **complete.** `P5-1` … `P5-5` all closed 2026-08-27. Nothing left
+  in this goal; the next unblocked work is `P1-5` below.
+- **`P1-5`** — done. `jsonfile.ts` passes the 18-case contract unmodified, so the port is a real
+  seam rather than decoration.
+- **`P4-3`** — done. Source selection, with the no-silent-fallback rule `errors.ts` had already
+  written down.
+- **`P4-2`** — **retracted** 2026-08-27, and `P4-3`'s dependency repointed at `P1-5`. §6 cut it with
+  the words "two real adapters is the bar; ccusage + jsonfile meets it", and `P1-5` delivered
+  jsonfile — so the cut's own precondition was met and the edge was the only thing keeping it alive.
+- **`P4-6`** — release. **Human-blocked** on `PRE-B` and `PRE-D`. The only task left.
 
 ---
 

@@ -7,6 +7,7 @@ import {
   WIDTH,
 } from "../../src/adapters/render/doctor.ts";
 import { DEFAULT_CONFIG } from "../../src/domain/config.ts";
+import { UNPRICEABLE_TOOLS } from "../../src/domain/surfaces.ts";
 import type { UsageSnapshot } from "../../src/domain/types.ts";
 
 const HOME = "/Users/alice";
@@ -39,6 +40,14 @@ const facts = (over: Partial<DoctorFacts> = {}): DoctorFacts => ({
   configPath: `${HOME}/.localusagemeter/config.json`,
   configWarnings: [],
   echoSeen: null,
+  unpriceableFound: [],
+  // The common single-candidate world: ccusage present, no sourceFile set. Cases that care about
+  // selection override this explicitly, so the default stays the shape most users actually have.
+  selection: { chosen: "ccusage", reason: "ccusage (auto)", namedButMissing: false },
+  probes: [
+    { id: "ccusage", configured: true, available: true, where: "/opt/homebrew/bin/ccusage" },
+    { id: "jsonfile", configured: false, available: false, where: "sourceFile is not set" },
+  ],
   ...over,
 });
 
@@ -229,5 +238,219 @@ describe("lum doctor — surfaces, so a missing one reads as a ceiling and not a
   it("says so even when nothing else is usable — it is a fact about lum, not about this machine", () => {
     const text = out(facts({ available: false, snapshot: null, snapshotAgeSeconds: null }));
     expect(text).toMatch(/statusline: Claude Code only/);
+  });
+});
+
+/**
+ * P5-3. The acceptance criteria, and the one invariant they are an instance of.
+ *
+ * Invariant 1 says unknown must never render as `$0.00`. A tool left out of the report entirely is
+ * the same falsehood told by omission: the Cursor user's total is missing their heaviest tool and
+ * the screen gives them no way to tell that from a quiet day.
+ */
+describe("lum doctor — tools that cannot be priced (P5-3)", () => {
+  it("names Cursor when it is installed, and says why it is not counted", () => {
+    const text = out(facts({ unpriceableFound: ["cursor"] }));
+    expect(text).toContain("cursor");
+    expect(text).toMatch(/no local spend data/);
+  });
+
+  it("says nothing at all when it is absent", () => {
+    // Not "prints an empty row" — the row must not exist. A permanent line about a tool the user
+    // does not run is noise, and noise is what stops the rest of this screen being read.
+    const text = out(facts({ unpriceableFound: [] }));
+    expect(text).not.toContain("cursor");
+    expect(text).not.toContain("unpriced");
+  });
+
+  it("fits the row without being clipped, for the case that actually ships", () => {
+    // The 80-column test below CANNOT catch an over-long sentence: `clip` truncates it to fit, so
+    // the assertion passes while the user reads "...so it cannot be…". That is exactly what the
+    // first draft of this line did. A single tool is the shipping case, and it must fit whole.
+    const line = renderDoctor(facts({ unpriceableFound: ["cursor"] })).lines.find((l) =>
+      l.includes("unpriced"),
+    ) as string;
+    expect(line.endsWith("…")).toBe(false);
+    expect(line).toContain("no local spend data");
+  });
+
+  it("stays inside 80 columns with every unpriceable tool present at once", () => {
+    // Guards the future shape of the list, not today's single entry: this line is assembled by
+    // joining names, so it is the one row here that grows without anyone editing the renderer.
+    const long = facts({ unpriceableFound: [...UNPRICEABLE_TOOLS, "some-other-editor"] });
+    for (const line of renderDoctor(long).lines) expect(line.length).toBeLessThanOrEqual(WIDTH);
+  });
+
+  it("is a warning, not a failure — there is nothing for the user to fix", () => {
+    // Exit 1 is reserved for "nothing is usable". An unpriceable tool is a permanent property of
+    // that tool, so exiting non-zero would make `lum doctor` fail forever on a working install.
+    expect(renderDoctor(facts({ unpriceableFound: ["cursor"] })).exitCode).toBe(0);
+  });
+});
+
+/**
+ * P4-3. The other half of the AC: the choice must be EXPLAINED, not merely deterministic. A
+ * deterministic choice nobody can see is indistinguishable from a coin flip landing the same way.
+ */
+describe("lum doctor — which source, and why (P4-3)", () => {
+  const twoCandidates = (over: Partial<DoctorFacts> = {}) =>
+    facts({
+      probes: [
+        { id: "ccusage", configured: true, available: true, where: "/opt/homebrew/bin/ccusage" },
+        { id: "jsonfile", configured: true, available: true, where: `${HOME}/usage.json` },
+      ],
+      selection: {
+        chosen: "jsonfile",
+        reason: "jsonfile (auto; preferred over ccusage)",
+        namedButMissing: false,
+      },
+      ...over,
+    });
+
+  it("stays quiet when there is nothing to explain", () => {
+    // One candidate, no sourceFile: a permanent "auto chose the only option" row is noise, and
+    // noise is what stops the rest of this screen being read.
+    expect(out(facts())).not.toContain("selected");
+  });
+
+  it("explains the choice as soon as a second candidate is configured", () => {
+    const text = out(twoCandidates());
+    expect(text).toContain("selected");
+    expect(text).toContain("preferred over ccusage");
+  });
+
+  it("lists every candidate with whether it answered", () => {
+    const text = out(twoCandidates());
+    expect(text).toContain("ccusage");
+    expect(text).toContain("jsonfile");
+    // Both were reachable, so both are ticked — the user can see nothing was skipped.
+    expect(text).toContain("~/usage.json");
+  });
+
+  it("prints the policy's own sentence rather than paraphrasing it", () => {
+    // If the renderer restated the rule, the explanation could drift from the decision, and an
+    // explanation that no longer matches the decision is worse than none.
+    const reason = "jsonfile (requested explicitly by config)";
+    const text = out(
+      twoCandidates({ selection: { chosen: "jsonfile", reason, namedButMissing: false } }),
+    );
+    expect(text).toContain(reason);
+  });
+
+  it("marks an unconfigured candidate as neither present nor broken", () => {
+    // `·` not `✗`: jsonfile with no sourceFile is not a failure, it is a source the user never
+    // asked for. Showing it as broken would send someone hunting a fault that does not exist.
+    const text = out(
+      twoCandidates({
+        probes: [
+          { id: "ccusage", configured: true, available: true, where: "/opt/homebrew/bin/ccusage" },
+          { id: "jsonfile", configured: false, available: false, where: "sourceFile is not set" },
+        ],
+        selection: { chosen: "ccusage", reason: "ccusage (auto)", namedButMissing: false },
+      }),
+    );
+    // Two configured candidates is what triggers the block, so with one the block is absent again.
+    expect(text).not.toContain("selected");
+  });
+
+  it("explains a named-but-missing source, and does NOT report it as a fallback", () => {
+    const text = out(
+      facts({
+        available: false,
+        selection: {
+          chosen: null,
+          reason:
+            'source "ccusage" was requested but did not answer (/opt/homebrew/bin/ccusage); ' +
+            'jsonfile would have worked — set source to it, or "auto"',
+          namedButMissing: true,
+        },
+        probes: [
+          { id: "ccusage", configured: true, available: false, where: "/opt/homebrew/bin/ccusage" },
+          { id: "jsonfile", configured: true, available: true, where: `${HOME}/usage.json` },
+        ],
+      }),
+    );
+    expect(text).toContain("was requested but did not answer");
+    expect(text).toContain("jsonfile would have worked");
+  });
+
+  it("shows the selection block whenever nothing was chosen, even with one candidate", () => {
+    const text = out(
+      facts({
+        available: false,
+        selection: {
+          chosen: null,
+          reason: "auto found no usable source; tried ccusage",
+          namedButMissing: false,
+        },
+      }),
+    );
+    expect(text).toContain("no usable source");
+  });
+
+  it("keeps every selection line inside 80 columns", () => {
+    const text = twoCandidates({
+      selection: { chosen: "jsonfile", reason: "x".repeat(300), namedButMissing: false },
+      probes: [
+        { id: "ccusage", configured: true, available: true, where: "y".repeat(300) },
+        { id: "jsonfile", configured: true, available: true, where: "z".repeat(300) },
+      ],
+    });
+    for (const line of renderDoctor(text).lines) expect(line.length).toBeLessThanOrEqual(WIDTH);
+  });
+});
+
+/**
+ * P4-3 regression: the source row and the selection block must not contradict each other.
+ *
+ * Found live, not by test. When nothing was selected, the source row printed its own candidate
+ * ladder marking an AVAILABLE ccusage as `✗ not found`, two lines above the selection block marking
+ * the same probe `✓`. One screen, two answers.
+ */
+describe("lum doctor — the screen never disagrees with itself (P4-3)", () => {
+  const nothingSelected = facts({
+    available: false,
+    attempts: [],
+    selection: {
+      chosen: null,
+      reason:
+        'source "jsonfile" was requested but did not answer (/gone.json); ccusage would have worked',
+      namedButMissing: true,
+    },
+    probes: [
+      { id: "ccusage", configured: true, available: true, where: "/opt/homebrew/bin/ccusage" },
+      { id: "jsonfile", configured: true, available: false, where: "/gone.json" },
+    ],
+  });
+
+  it("defers to the selection block instead of printing a second ladder", () => {
+    const text = out(nothingSelected);
+    expect(text).toContain("none selected");
+    expect(text).not.toContain("not found. Looked for:");
+  });
+
+  it("never marks an available source as not found", () => {
+    // The exact contradiction: ccusage available, so no line may pair it with a ✗.
+    for (const line of renderDoctor(nothingSelected).lines) {
+      if (line.includes("ccusage") && line.includes("✗")) {
+        throw new Error(`contradictory line: ${line}`);
+      }
+    }
+  });
+
+  it("still keeps the per-tier ladder when a source WAS chosen but is now unreachable", () => {
+    // The ccusage four-tier ladder is the most useful thing on this screen for an install problem,
+    // so the fix above must not have deleted it for the case it exists to serve.
+    const text = out(
+      facts({
+        available: false,
+        attempts: [
+          { where: "@ccusage/ccusage-darwin-arm64 in node_modules", found: false },
+          { where: "ccusage on PATH", found: false },
+        ],
+      }),
+    );
+    expect(text).toContain("not found. Looked for:");
+    expect(text).toContain("@ccusage/ccusage-darwin-arm64 in node_modules");
   });
 });

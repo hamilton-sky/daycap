@@ -28,6 +28,23 @@ export type DoctorFacts = {
   configWarnings: readonly string[];
   /** Present only when the statusline has recorded a rate-limit reading. */
   echoSeen: { fiveHourPct?: number; sevenDayPct?: number; ageSeconds: number } | null;
+  /**
+   * Tools found installed that can never be priced from disk (P5-3, `domain/surfaces.ts`).
+   *
+   * Detected, not configured — so an empty array means "none present", never "not checked".
+   */
+  unpriceableFound: readonly string[];
+  /**
+   * Which source won and why (P4-3, `domain/source-selection.ts`).
+   *
+   * The `reason` string is printed VERBATIM rather than reconstructed here. The AC asks for a
+   * choice that is deterministic and explained; if the renderer paraphrased the policy, the
+   * explanation could drift from the decision, and an explanation that no longer matches the
+   * decision is worse than none.
+   */
+  selection: { chosen: string | null; reason: string; namedButMissing: boolean };
+  /** Every candidate that was probed, in the order `auto` walks them. */
+  probes: readonly { id: string; configured: boolean; available: boolean; where: string }[];
 };
 
 const OK = "✓";
@@ -61,6 +78,37 @@ function clip(text: string, width: number): string {
   return `${(space > width * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
+/**
+ * Wrap prose across continuation lines instead of clipping it.
+ *
+ * `clip` is right for a PATH — there is no useful word boundary and the head identifies it. It is
+ * wrong for a sentence whose remedy is at the END: the P4-3 selection reason finishes with "jsonfile
+ * would have worked — set source to it, or \"auto\"", and clipping deletes exactly the half the
+ * reader needs. Found by a test asserting the remedy was present, which failed on the clip.
+ */
+function wrapped(label: string, mark: string, text: string): string[] {
+  const prefix = `  ${label.padEnd(10)} ${mark} `;
+  const width = WIDTH - prefix.length;
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current.length === 0) {
+      current = word;
+    } else if (current.length + 1 + word.length <= width) {
+      current = `${current} ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current.length > 0) lines.push(current);
+  // A single word longer than the row still has to give — clip that one rather than overflow.
+  return lines.map((l, i) =>
+    i === 0 ? prefix + clip(l, width) : `               ${clip(l, WIDTH - 15)}`,
+  );
+}
+
 function row(label: string, mark: string, text: string): string {
   const prefix = `  ${label.padEnd(10)} ${mark} `;
   return prefix + clip(text, WIDTH - prefix.length);
@@ -91,12 +139,35 @@ export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: n
     const hit = facts.attempts.find((a) => a.found);
     const at = tildify(hit?.detail ?? hit?.where ?? "resolved", facts.home);
     lines.push(row("source", OK, `${facts.sourceId} (${at})`));
+  } else if (facts.selection.chosen === null) {
+    // P4-3. Nothing was selected, so there is no per-tier ladder to print — and printing the
+    // candidates here would DUPLICATE the `selected` block below, which owns that list and marks it
+    // accurately. The first version did print them, and marked an available ccusage as `✗ not
+    // found` two lines above the same probe showing `✓`. A diagnostic contradicting itself on one
+    // screen is worse than one that says less.
+    lines.push(row("source", BAD, "none selected — see `selected` below"));
   } else {
     lines.push(row("source", BAD, `${facts.sourceId} not found. Looked for:`));
     for (const a of facts.attempts) {
       lines.push(
         clip(`               ${a.found ? OK : BAD} ${tildify(a.where, facts.home)}`, WIDTH),
       );
+    }
+  }
+
+  // --- selection: which source, and why it and not the other one -------------------------------
+  // P4-3. Printed whenever the answer is not obvious: more than one candidate was configured, or
+  // nothing was chosen at all. With a lone ccusage and no sourceFile there is nothing to explain,
+  // and a permanent "auto chose the only option" line is the kind of noise that stops the rest of
+  // this screen being read.
+  const candidates = facts.probes.filter((p) => p.configured);
+  if (candidates.length > 1 || facts.selection.chosen === null) {
+    lines.push(
+      ...wrapped("selected", facts.selection.chosen === null ? BAD : OK, facts.selection.reason),
+    );
+    for (const p of facts.probes) {
+      const mark = !p.configured ? "·" : p.available ? OK : BAD;
+      lines.push(clip(`               ${mark} ${p.id} — ${tildify(p.where, facts.home)}`, WIDTH));
     }
   }
 
@@ -167,6 +238,24 @@ export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: n
   // list of its own built-in items (P5-1, verified against the docs and the source) — so this is a
   // ceiling, not a gap. Saying so costs one line; leaving it out costs someone an afternoon.
   lines.push(row("surfaces", OK, "guard: Claude Code, Codex · statusline: Claude Code only"));
+
+  // P5-3. Only printed when the tool is actually here. A permanent line listing tools the user does
+  // not run is noise, and noise is what makes the rest of this screen stop being read — whereas a
+  // Cursor user is looking at a total that silently omits their heaviest tool. WARN, not BAD:
+  // nothing is broken and there is nothing to fix, which is exactly the point being made.
+  if (facts.unpriceableFound.length > 0) {
+    lines.push(
+      row(
+        "unpriced",
+        WARN,
+        // "anywhere on disk" is doing real work: it says this is a ceiling, not a missing feature,
+        // so nobody goes looking for the config flag that would switch it on. The wording is also
+        // length-tuned to the 65 columns this row has — a longer sentence gets silently clipped
+        // mid-word by `clip`, which the 80-column test cannot see. See doctor.test.ts.
+        `${facts.unpriceableFound.join(", ")} installed — exposes no local spend data anywhere on disk`,
+      ),
+    );
+  }
 
   // --- signal -----------------------------------------------------------------------------------
   const echo = facts.echoSeen;
