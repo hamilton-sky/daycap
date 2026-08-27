@@ -69,10 +69,27 @@ const fired = (): string[] =>
         .filter((l) => l.trim().length > 0)
     : [];
 
+/**
+ * These assert LATCH CORRECTNESS across process boundaries, not speed, so they carry an explicit and
+ * generous wall-clock budget instead of vitest's 5s default.
+ *
+ * From a real failure: two of them went red on a developer machine at load average 41 — one timing
+ * out, one seeing a single notification where it expected two because a spawned process had not
+ * finished yet — and both passed on the very next run with nothing changed. A timeout is a latency
+ * assertion whether or not you meant it as one, and the default here meant "the latch fires exactly
+ * once" and "this machine is not busy" shared one red light. Only the first is a property of this
+ * code, and it is the correctness centrepiece.
+ *
+ * 60s is far past any honest duration for three sequential spawns; a genuine hang still reports.
+ */
+const LATCH_BUDGET_MS = 60_000;
+
 const maybe = BUILT && process.platform !== "win32" ? describe : describe.skip;
 
 maybe("latch across separate processes", () => {
-  it("0.8 then 1.0 fire exactly once each, with no re-fire on restart or dip", () => {
+  it("0.8 then 1.0 fire exactly once each, with no re-fire on restart or dip", {
+    timeout: LATCH_BUDGET_MS,
+  }, () => {
     run(9); // 0.90 — crosses 0.8
     expect(fired()).toHaveLength(1);
 
@@ -92,7 +109,9 @@ maybe("latch across separate processes", () => {
     expect(all[1]).toMatch(/over/);
   });
 
-  it("a corrupt latch fires nothing and still exits 0 (L6 — fail quiet)", () => {
+  it("a corrupt latch fires nothing and still exits 0 (L6 — fail quiet)", {
+    timeout: LATCH_BUDGET_MS,
+  }, () => {
     run(9);
     expect(fired()).toHaveLength(1);
 
@@ -103,7 +122,9 @@ maybe("latch across separate processes", () => {
     expect(fired()).toHaveLength(1);
   });
 
-  it("a degraded read never fires and never advances the latch (L9)", () => {
+  it("a degraded read never fires and never advances the latch (L9)", {
+    timeout: LATCH_BUDGET_MS,
+  }, () => {
     // No collector at all: `lum today` renders (no source) and must not alert on a number it
     // does not have.
     execFileSync(process.execPath, [BIN, "today"], {
