@@ -11,6 +11,7 @@ const config = (over: Partial<Config> = {}): Config => ({
   resetHourLocal: 0,
   thresholds: [0.8, 1],
   source: "auto",
+  sourceFile: null,
   tools: ["*"],
   primarySignal: "auto",
   pacing: false,

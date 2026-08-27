@@ -117,13 +117,31 @@ export type UsageSnapshot = {
 /** Which number the headline shows. `auto` resolves at render time (ARCHITECTURE_PROPOSAL §4). */
 export type PrimarySignal = "auto" | "rate-limit" | "usd";
 
-export type SourceId = "auto" | "budi" | "ccusage" | "tokentracker";
+/**
+ * Which collector to read. `auto` probes in a deterministic order (P4-3, `source-selection.ts`).
+ *
+ * WHAT WENT AWAY, recorded because two of the four original names are still written down in older
+ * planning docs and reading this type is how someone finds out they are gone: `budi` was dropped by
+ * P0-4's verdict (both of its paths were session-shaped; `ccusage daily --json` satisfied D1-D4
+ * instead), and `tokentracker` was cut in BUILD_PLAN_v3 §6 — "two real adapters is the bar;
+ * ccusage + jsonfile meets it". `config.ts` rejects both spellings by NAME rather than as a generic
+ * unknown, so a user carrying an old config is told what happened instead of silently getting
+ * `auto`.
+ */
+export type SourceId = "auto" | "ccusage" | "jsonfile";
 
 export type Config = {
   dailyBudgetUsd: number;
   resetHourLocal: number;
   thresholds: readonly Threshold[];
   source: SourceId;
+  /**
+   * Path to the user's own JSON usage file, or null when they have not set one.
+   *
+   * Null is what makes `jsonfile` not a candidate under `auto`: a source that needs a path it does
+   * not have cannot be probed, so an unconfigured jsonfile is absent rather than broken.
+   */
+  sourceFile: string | null;
   /** `["*"]` for every tool the collector reports, or an explicit kebab-case list. */
   tools: readonly string[];
   primarySignal: PrimarySignal;
