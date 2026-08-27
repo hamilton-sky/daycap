@@ -1,179 +1,228 @@
-# local-usage-meter
+# `lum`
 
-Planning-stage repo for **LocalUsageMeter** — a local **budget guardrail** for AI coding tools.
-It reads today's spend from a usage collector already on the machine, compares it against a
-configurable daily allowance across *every* tool you use — Claude Code, Codex, Cursor, Copilot — and
-warns you before the allowance is gone. No server, no proxy, no login.
+A local **budget guardrail** for AI coding tools. It reads today's spend from a usage collector
+already on your machine, compares it against a daily allowance across every tool you use, warns you
+before the allowance is gone — and can **block** tool calls once it is.
 
-> **Status: P0 passed (GO), P1 started — 2026-08-25.** The collector spike is done and the verdict
-> is **GO**: see [`SPIKE_RESULT.md`](pathly/features/local-usage-meter/SPIKE_RESULT.md). budi + ccusage
-> reconcile to the cent on 21,000 real messages. `src/` now exists — the P1-0 scaffold, the domain
-> types and ports (P1-1), and the usage-day boundary with 100% branch coverage (P1-2). `pnpm verify`
-> is green. Next: `P1-3`, the `UsageSourcePort` contract suite.
->
-> **Four gates moved on 2026-08-25.** **`PRE-G` is answered: local.** The user's wall clock defines
-> "today" — every day label, budget window and threshold is computed in the user's IANA timezone with
-> `resetHourLocal`, and UTC is never inherited from a collector's API. **`PRE-D` is answered:** this
-> repo is `local-usage-meter` (bin `lum` unchanged). **`PRE-A` is narrowed** to Claude Code + Codex +
-> Cursor, and measurement shows **Cursor exposes no local spend data at all** — its own tracking DB
-> has no token or cost column, so no local collector can price it. **The collector flipped:**
-> `ccusage@20` is primary (zero install, native `-z <IANA>`, per-tool split verified), with
-> `budi.cli.ts` kept as the second real adapter so the contract suite always runs against two real
-> implementations. `PRE-C` still needs a human to read `SPIKE_RESULT.md`, and **`PRE-F` is now the
-> next real blocker** — ccusage costs 1–3 s per call, so the snapshot cache is load-bearing rather
-> than an optimization. See
-> [`feedback/HUMAN_QUESTIONS.md`](pathly/features/local-usage-meter/feedback/HUMAN_QUESTIONS.md).
->
-> **The design pivoted on 2026-08-24.** v1 planned to build its own usage collector for two CLIs.
-> Market research found that layer is thoroughly commoditised — [budi](https://github.com/siropkin/budi)
-> ships almost exactly that architecture for five tools, and
-> [Token Tracker](https://github.com/xiufengsun/TokenTracker) covers 34. But **none of them does
-> budgets or alerts.** v2 consumes a collector and owns the policy layer instead. See
-> [Where this stands](#where-this-stands).
+No server, no proxy, no login, no daemon of its own. Nothing leaves the machine.
+
+> **Naming.** The CLI is `lum`. The repo is still `token-tracker` and the product name is not
+> settled — see [Open decisions](#open-decisions). Don't write marketing copy against either yet.
 
 ---
 
-## Why
+## Try it in 30 seconds
 
-Provider consoles aggregate usage server-side with 1–2 day latency, so you can't see today's spend
-in time to stay inside a daily allowance. Local transcripts carry the provider-reported `usage`
-block per turn, so a collector reading them gives an immediate, reasonably accurate number — that
-part is solved, several times over.
+```bash
+pnpm install && pnpm verify      # typecheck, lint, build, 636 tests
+npm i -g ccusage@20              # the collector, if you don't have it
+node dist/lum.js today           # a real number from your own transcripts
+node dist/lum.js doctor          # why the number is what it is
+```
 
-What isn't solved: every AI coding tool has its own console, its own plan, and its own limit. None of them tells you
-your **total** for today, and none of them warns you before you run out. The existing trackers all
-answer *"what did I spend?"* — this answers *"am I about to blow my allowance?"*
-
-The primary surface is one line in your Claude Code statusline:
+## What you get
 
 ```
-today $3.20 / $10.00 (32%) ▓▓░░░          API-key account, under 80%     (green)
+lum — 2026-08-27
+
+  claude-code     $215.78
+  codex             $1.37
+  ───────────────────────
+  TOTAL           $217.15  (imputed)
+
+  ███████████████░░░░░░░░░░░░░░░  49% of $20.00
+```
+
+One line in your Claude Code statusline, which is the surface that actually changes behaviour:
+
+```
+today $3.20 / $10.00 (32%) ▓▓░░░          API-key account, under 80%
 5h 23% · 7d 41% ▓▓░░░  ≈$3.20 today       subscription — rate limit first
 today $6.40 / $10.00 (64%) ▓▓▓░░ ↑        ahead of pace for the time of day
-today $8.40 / $10.00 (84%) ▓▓▓▓░          crossed 80%      (amber + notification)
-today $11.90 / $10.00 (119%) ▓▓▓▓▓        over budget      (red + notification)
-lum — (no source)                          no collector installed or running
+today $8.40 / $10.00 (84%) ▓▓▓▓░          crossed 80%   (amber + notification)
+today $11.90 / $10.00 (119%) ▓▓▓▓▓        over budget   (red + notification)
+lum — (no source)                          no collector installed
 ```
 
-On a subscription the headline is **rate-limit percentage**, not dollars — imputed USD is money that
-doesn't exist, and Claude Code hands the real constraint to the statusline on stdin. Plus
-`lum today` (per-tool breakdown) and `lum doctor` (which collector, how fresh, what's missing).
+On a subscription the headline is **rate-limit percentage, not dollars** — imputed USD is money that
+does not exist, and Claude Code hands the real constraint to the statusline on stdin.
 
-## Design in one diagram
+## Install
 
-We never parse a log. A collector already on the machine does that — for more tools than we ever
-would — and we own the budget policy on top.
+```bash
+lum install            # prints the Claude Code settings block, changes nothing
+lum install --write    # applies it, after backing up settings.json
+lum install --write --guard    # also installs the PreToolUse enforcement hook
+lum install --write --codex    # Codex instead (~/.codex/hooks.json) — hooks only
+```
+
+`--write` never clobbers: it backs up `settings.json` first, and re-running is idempotent.
+
+Config lives at `~/.localusagemeter/config.json`. Every key is optional; a malformed file still
+renders, and `lum doctor` prints the reason rather than failing silently.
+
+```json
+{
+  "dailyBudgetUsd": 20,
+  "resetHourLocal": 0,
+  "thresholds": [0.8, 1.0],
+  "source": "auto",
+  "notifications": { "enabled": true },
+  "guard": { "enabled": false, "denyAt": 1.0, "allowTools": ["Read"] }
+}
+```
+
+### Sources
+
+```json
+{ "source": "auto" }
+{ "source": "ccusage" }
+{ "source": "jsonfile", "sourceFile": "/Users/you/usage.json" }
+```
+
+`auto` walks **jsonfile, then ccusage** — jsonfile is only a candidate when you have set a path,
+which is a deliberate act, where `ccusage` on `PATH` may be there because something else installed
+it. With no path set, `auto` is ccusage.
+
+**Naming a source turns the fallback off.** If you write `"source": "ccusage"` and ccusage cannot be
+reached, `lum` reports that and stops — it does not quietly read the other one. Silently falling back
+from the source you chose is how a tool reports the wrong numbers without telling you. `doctor` will
+say which other source *would* have worked, so a broken install and a wrong config key are
+distinguishable.
+
+**`jsonfile` is the escape hatch.** If your tool has no collector, produce this yourself — a cron
+job, a shell one-liner, an export from something nobody has adapted — and `lum` counts it:
+
+```json
+{
+  "schema": 1,
+  "generatedAtUtc": "2026-08-27T09:00:00.000Z",
+  "entries": [
+    { "at": "2026-08-27T09:00:00.000Z", "tool": "my-own-tool", "usd": 7.50 },
+    { "at": "2026-08-27T10:00:00.000Z", "tool": "claude-code", "usd": 2.25, "imputed": true }
+  ]
+}
+```
+
+`usd: null` means "activity I could not price". It is not zero and never renders as `$0.00`.
+
+## Tool coverage — read this before assuming
+
+| | Claude Code | Codex | Cursor |
+|---|---|---|---|
+| `today` / `doctor` / notifications | ✅ | ✅ | ❌ named, never priced |
+| statusline | ✅ | ❌ not possible | ❌ |
+| guard (blocking) | ✅ | ✅ *weaker guarantee* | ❌ |
+
+- **Codex has no statusline and cannot.** `tui.status_line` takes a closed list of Codex's own
+  built-in items — no command contract, no stdin JSON. That is schema-level, a ceiling not a gap.
+- **Cursor exposes no local spend data at all.** Its tracking DB has no token, cost or price column,
+  so no collector can price it from disk — ever. `lum doctor` names it as detected-but-unpriceable
+  rather than silently omitting it, because a total that quietly excludes your heaviest tool is
+  worse than one that says what it is missing.
+- **The two guard ticks are not the same tick.** Claude Code documents that a hook `deny` applies
+  even under `--dangerously-skip-permissions`. OpenAI explicitly declines to make that promise,
+  calling hooks "a useful guardrail, not a complete enforcement boundary". Don't flatten them.
+
+## The guard
+
+Off by default, twice over: it needs `--guard` at install **and** `guard.enabled` in config.
+
+It reads a cached snapshot with `node:fs` and never calls the collector, because a hook that times
+out does **not** block — so a slow guard is an absent guard. It denies only on a fresh (<2 min),
+healthy, trusted snapshot, and **fails open on every fault**. The denial message says how to get
+unstuck.
+
+**It is not unbypassable, and the docs will not pretend otherwise.** `disableAllHooks`, `--bare`,
+and simply removing the hook all turn it off. What it does give you is a real stop at the moment you
+would otherwise blow the budget, rather than a number you had already stopped reading.
+
+## Design
+
+We never parse a log. A collector already on the machine does that, for more tools than we ever
+would, and `lum` owns the budget policy on top.
 
 ```
   Claude Code ─┐
-  Codex CLI   ─┤   (collector already tails these)
-  Cursor      ─┼──►  budi daemon :7878  ──► normalised, priced usage
-  Copilot     ─┤     (or Token Tracker, or ccusage)
-  …           ─┘                                  │
-                                          GET /analytics/*
-                                                  ▼
-                     ┌────────────────────────────────────────────┐
-                     │  lum  —  budget policy only                │
-                     │  evaluate → latch → render → notify        │
-                     └───────────────────┬────────────────────────┘
+  Codex CLI   ─┼──►  ccusage  ──►  normalised, priced usage ──┐
+  your own    ─┘     (or your own JSON file)                  │
+                                                             ▼
+                     ┌───────────────────────────────────────────────┐
+                     │  lum  —  budget policy only                   │
+                     │  select source → evaluate → latch → notify    │
+                     └───────────────────┬───────────────────────────┘
      Claude Code stdin ──────────────────┤  rate_limits, cost, context_window
                                          ▼
-                        statusline row · lum today · OS notification
+        statusline row · lum today · OS notification · PreToolUse deny
 ```
 
-Node ≥ 20.11, TypeScript, ESM-only. `domain/` is pure (no fs, no clock, no network — enforced by
-lint *and* a test that greps the build output); `adapters/source/*` implements `UsageSourcePort`
-once per collector, so no collector is load-bearing.
+Node ≥ 22, TypeScript, ESM-only, **zero runtime dependencies**. `domain/` is pure — no fs, no clock,
+no network — enforced by lint *and* by tests that grep the build output.
 
-**No daemon of our own.** v1 needed one to own a dedup set (now the collector's job) and a threshold
-latch (a file, not a process). Deleting it also deletes the lockfile, liveness detection, the
-self-spawning background process nobody consented to, and `service install`.
+### Invariants
 
-### The traps — now collector-selection criteria
+Break these and the tool is worse than nothing:
 
-Verified against a real 3,683-line session log on 2026-08-24. We no longer implement these, but a
-collector that gets them wrong reports wrong numbers, so they're worth testing before you trust one:
+1. **Unknown never renders as `$0.00`.** A collector-*confirmed* zero may say zero; "we don't know"
+   may not. `ToolSpend.usd` is nullable so this stays expressible.
+2. **The latch fires at most once per threshold per usage-day.** A dip never re-arms it; only a day
+   change does.
+3. **Only trusted data fires or blocks.** Stale, timed-out, source-down or unpriced → no
+   notification, no latch advance, no denial. A missed alert costs money; a wrong one costs trust.
+4. **Persist the latch, then notify.** The reverse order re-alerts forever.
+5. **Every surface exits 0.** Only `doctor` may exit 1, and only when nothing is usable.
+6. **The guard fails open.**
+7. **Never parse a transcript.** Enforced by a CI gate, not by discipline.
 
-- **Double-counting.** Claude Code writes the same assistant message into several `.jsonl` files on
-  resume/compact/branch. Measured inflation without a `message.id` + `requestId` dedup key: **2.41×**.
-- **Cache-bucket direction.** Anthropic's `input_tokens` *excludes* cache reads (measured: max
-  `input_tokens` = **2** vs max `cache_read_input_tokens` = **992,185**); OpenAI's includes them.
-  Cache read was **97.4%** of a 30-day sample — mispricing it as plain input turns ~$1,135 into ~$6,792.
-- **Cache TTL.** Real logs carried the 5m/1h split on **100%** of turns, and it was **100% 1-hour
-  (2×)** — not the 5-minute tier (1.25×) that v1's own ADR assumed.
+## Honest positioning
 
-## Repo layout
+The differentiator is **zero setup**, not uniqueness. LiteLLM can do budget enforcement too — with a
+proxy, a Postgres database, and re-pointed credentials. The existing local trackers all answer *"what
+did I spend?"*; this answers *"am I about to blow my allowance?"* — and installs with one command
+and no credentials.
 
-```
-src/domain/{types,ports,window}.ts      P1-1, P1-2 — pure: no fs, no net, no clock
-src/bin/{lum.ts,statusline.js}          entrypoints; statusline is node:fs only, always exit 0
-test/unit/                              74 tests; src/domain/** is at 100% branch coverage
-test/fixtures/collector/                17 scrubbed collector fixtures frozen by P0-5, + README
-local-usage-meter-BRIEF.md              the original seed (scope-change banner at top)
-pathly/features/local-usage-meter/
-  SPIKE_RESULT.md                       ← P0 verdict (GO), the two API traps, and PRE-G
-  ARCHITECTURE_PROPOSAL.md              ← v2, CURRENT. Start here.
-  archive/…-v1-own-parsers.md           v1 (927 lines), superseded — kept for its reasoning
-  PO_NOTES.md                           personas, success criteria, constraints
-  RESEARCH.md                           §1–4 API findings · §5 competitive landscape (forced v2)
-  DESIGN.md                             palette, statusline format, notification copy
-  fixtures/                             scrubbed real Claude log — collector conformance fixture
-  feedback/HUMAN_QUESTIONS.md           the five open decisions (PRE-A…PRE-E)
-  artifacts/BOARD_EVAL.md               v1 execution plan — superseded
-  BOARD.json / EVENTS.jsonl / STATE.json   Pathly board + event log (generated)
-```
+## Open decisions
 
-Read `ARCHITECTURE_PROPOSAL.md` (v2) first — §1 position statement, §3 the port, §7 phases.
-`feedback/HUMAN_QUESTIONS.md` is the shortest path to what is *not* settled.
+Two, both needing a human, both blocking release:
 
-## Where this stands
-
-A [Pathly](https://github.com/hamilton-sky/pathly-adapters) agent pipeline ran PO → architecture →
-research → design → planning on 2026-08-10 and produced ~1,650 lines of markdown, four goals,
-fourteen tasks, and no code. On 2026-08-24 a competitive review found the design was aimed at the
-commoditised half of the problem, and v2 replaced it.
-
-**Five decisions are open, all needing a human:**
-
-| # | Decision | Why it matters |
+| # | Decision | State |
 |---|---|---|
-| **PRE-A** | **The exact tool list.** The brief says Claude Code + Codex; the target market also uses **Cursor**. | Decides the collector, and whether a zero-install path exists. Cursor can't be served by v1's design at all. |
-| **PRE-B** | **Has anyone asked for this?** No budget/alert issue has ever been filed on budi. | Unclaimed and unwanted look identical from outside. File the issue — cheap signal. |
-| **PRE-C** | **Does budi's `/analytics/*` return day-shaped per-tool spend?** | One `curl`. Go/no-go on the whole plan before any code is written. |
-| **PRE-D** | **Rename.** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established OSS project doing exactly this. | The repo is two commits old — cheapest it will ever be to fix. |
-| **PRE-E** | **Is doubled install friction acceptable?** Users install a 13 MB Rust collector before this does anything. | The brief promised "setup is trivial". Main adoption threat. |
+| **PRE-B** | **Has anyone asked for this?** | Open. Unclaimed and unwanted look identical from outside. |
+| **PRE-D** | **What is it called?** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established project doing the collection half. | Open. CLI `lum` is settled; repo and product name are not. |
 
-## Planned phases (v2)
-
-| Phase | Delivers | Exit criteria |
-|---|---|---|
-| **P0** | Spike: hit `127.0.0.1:7878/analytics/*`, print today's per-tool spend | Real numbers for ≥2 tools. **Go/no-go gate.** |
-| **P1** | `domain/*`, `budi.http.ts`, `lum today` | Per-tool and total reconcile; degrades cleanly when the daemon is down |
-| **P2** | `budget.ts`, `pacing.ts`, `latch.ts`, notifier | 0.8 then 1.0 fire exactly once; no re-fire across restart or dip-below |
-| **P3** | `statusline.js`, stdin parsing, rate-limit primary | <30 ms p95; exit 0 on every fault; `rate_limits` absent handled silently |
-| **P4** | `ccusage.shellout.ts`, `tokentracker.ts`, `lum doctor` | Works with zero collectors (degraded) and with each one |
-
-P0 is a genuine gate, not a formality. If budi's analytics endpoints are session-shaped rather than
-day-shaped, P1 shifts to `budi stats --format json` — worth knowing before anything else exists.
+Also unresolved and cheap: `package.json` says `"license": "UNLICENSED"` with no `LICENSE` file,
+which is a positive statement that nobody may use this. See
+[`LICENSE_SCAN.md`](pathly/features/local-usage-meter/LICENSE_SCAN.md) — the published artifact
+carries **no third-party code at all**, so the choice is unconstrained.
 
 ## Non-goals
 
-- **Collecting usage.** We consume a collector; we never parse a transcript. That's ADR-v2-001.
-- Hard-blocking when over budget — advisory only; nothing here can intercept a CLI.
+- **Collecting usage.** We consume a collector; we never parse a transcript (ADR-v2-001).
 - Central multi-user aggregation — no server, no backend, no shared database.
-- Any network call beyond `127.0.0.1` to the local collector.
-- Billing-exact accuracy — "reasonable" is the bar.
+- Any network call at all from shipped code.
+- Billing-exact accuracy — "reasonable, today, in time to act" is the bar.
 
 ## Privacy
 
-Nothing leaves the machine, and v2 strengthens this: we no longer read transcripts at all. The only
-network call any shipped code may make is loopback to the local collector, enforced by a lint rule
-*and* a build-artifact grep test. A canary-string test asserts no fixture content reaches any output.
+Nothing leaves the machine. The only paths any shipped code touches are the collector's own CLI, the
+user's config, and — on an explicit `--write` — `~/.claude/settings.json` or `~/.codex/hooks.json`.
+Transcript directories are forbidden in `src/` by a test. `doctor` abbreviates your home directory to
+`~` because its output is written to be pasted into issues. A canary test asserts no fixture content
+reaches stdout, the snapshot, the latch, or a notification's argv.
 
-The fixture in `fixtures/` was built by whitelist — constructing a new object from permitted fields,
-never filtering the original — and verified to contain 10 keys, one content string (`[scrubbed]`),
-zero prose, and zero filesystem paths.
+## Development
+
+```bash
+pnpm verify        # typecheck + lint + build + test  (636 passing, 12 skipped)
+pnpm test:watch
+pnpm coverage
+```
+
+Conventions that made this codebase work, in [`HANDOFF.md`](HANDOFF.md) §8 — the short version:
+mutation-test anything load-bearing, every skip carries a written reason, never loosen a gate without
+writing down why in the same commit, and comments explain *why*, especially where the code looks
+wrong.
 
 ## License
 
-Not yet chosen. ccusage, whose pricing table this design vendors, is MIT.
+Not yet chosen — see [Open decisions](#open-decisions).

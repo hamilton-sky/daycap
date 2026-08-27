@@ -1,15 +1,17 @@
 # HANDOFF — local-usage-meter (`lum`)
 
-**State as of 2026-08-27.** 636 tests passing, 12 skipped locally. `main` @ `00d0dfb`; five further
-commits sit unpushed on `feat/p5-3-cursor-doctor` (P3-4 flake fix, P5-3, this file, P1-5, P4-3) and
-have NOT been through CI on Linux or Windows yet — that is the one gap between "works" and "shipped".
+**State as of 2026-08-27.** `main` @ `7664f55`. 636 tests passing, 12 skipped, **CI green on macOS,
+Linux and Windows** — PR #11 merged, and the Windows leg genuinely ran the P3-4 layer-B assertion
+that used to flake (4563 ms, pass), which was the point of putting it through CI.
 
-**Every board task is done except `P4-6` (release), which no agent can start:** it is contingent on
-PRE-B (is there demand?) and PRE-D (what is it called?). The code is feature-complete.
+**Every board task is done except `P4-6` (release), and that one is blocked on two questions no agent
+can answer:** PRE-B (has anyone asked for this?) and PRE-D (what is it called?). The code is
+feature-complete. Three of P4-6's four parts are done anyway — README, install docs, and the license
+scan; only "final name" is waiting.
 
-Four `feat/*` branches survive on the remote and none are live work: three are squash-merged, and
-`feat/p5-multi-tool-parity` forked before #9 and is BEHIND main — it holds `.prompts/` and nothing
-else worth keeping.
+Four `feat/*` branches survive on the remote and none are live work: all are squash-merged except
+`feat/p5-multi-tool-parity`, which forked before #9 and is BEHIND main — it holds `.prompts/` and
+nothing else worth keeping.
 
 Read this first, then `pathly/features/local-usage-meter/BUILD_PLAN_v3.md` for the design rationale.
 
