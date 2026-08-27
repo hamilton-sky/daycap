@@ -89,7 +89,21 @@ describe("AtomicFileStore — atomicity", () => {
     expect(reads).toBeGreaterThan(0);
   });
 
-  it("SIGKILL mid-write never leaves a torn file", async () => {
+  /**
+   * Node 22+ only, and the constraint is the TEST HARNESS, not the code under test.
+   *
+   * The child below imports `atomic.ts` directly under `--experimental-strip-types`, which arrived
+   * in Node 22.6. On Node 20 that flag does not exist, so the child exits before writing anything
+   * and the case times out waiting for writes that never happen — a red build saying nothing about
+   * atomicity. `dist/` is plain JS and runs on the floor `engines` claims; only this harness needs
+   * 22, which is why the skip is here rather than the floor being raised back to satisfy it.
+   *
+   * Found by the `node20-compat` CI job: 626 of 648 tests passed on Node 20, and this was the one.
+   */
+  const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
+  const stripsTypes = NODE_MAJOR >= 22 ? it : it.skip;
+
+  stripsTypes("SIGKILL mid-write never leaves a torn file", async () => {
     const s = new AtomicFileStore(dir);
     // .href, not .pathname: a bare Windows path is not a valid ESM specifier.
     const storePath = new URL("../../src/adapters/store/atomic.ts", import.meta.url).href;

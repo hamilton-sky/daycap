@@ -20,3 +20,38 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+
+  # Does our SHIPPED code run on the floor `engines` claims? A separate job rather than a second
+  # matrix dimension, for two reasons found the hard way:
+  #
+  # 1. `pnpm` CANNOT RUN ON NODE 20 AT ALL. pnpm@11 imports `node:sqlite`, which does not exist
+  #    before Node 22, so it dies during `pnpm/action-setup` — before any of our code is reached.
+  #    That makes `pnpm verify` unusable here, so this job installs under 22 and then switches the
+  #    runtime to 20 for the checks that are actually about our code. It is a real constraint of the
+  #    toolchain, not of the product: nobody installing `lum` uses pnpm.
+  #
+  # 2. Doubling the matrix DOUBLED THE LOAD and broke an unrelated test. Six concurrent jobs pushed
+  #    `layer C — absolute wall clock < 150ms p95` to 188ms on the Windows runner, which had passed
+  #    on the two PRs before it. Layer C measures absolute wall clock including Node's own boot, so
+  #    it is sensitive to exactly the contention an expanded matrix creates. One extra job on one OS
+  #    keeps that signal readable.
+  #
+  # Typecheck and tests only. Lint and build run dev tools whose own Node support is not a promise
+  # this project makes to anyone.
+  node20-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --version
+      # Invoked directly rather than through `pnpm run`, because pnpm is the thing that cannot start.
+      - run: npx tsc --noEmit
+      - run: npx vitest run

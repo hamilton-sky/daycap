@@ -156,7 +156,7 @@ would, and `lum` owns the budget policy on top.
         statusline row · lum today · OS notification · PreToolUse deny
 ```
 
-Node ≥ 22, TypeScript, ESM-only, **zero runtime dependencies**. `domain/` is pure — no fs, no clock,
+Node ≥ 20.11, TypeScript, ESM-only, **zero runtime dependencies**. `domain/` is pure — no fs, no clock,
 no network — enforced by lint *and* by tests that grep the build output.
 
 ### Invariants
