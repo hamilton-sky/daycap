@@ -140,7 +140,7 @@ npm view ccusage@20 license --json
 
 ---
 
-## 6. A side-effect worth recording: `layer C` is contention-sensitive
+## 6. ~~A side-effect worth recording: `layer C` is contention-sensitive~~ — RESOLVED 2026-08-27
 
 Not a license finding. It belongs here because this scan's own follow-up work is what surfaced it.
 
@@ -153,5 +153,55 @@ So layer C is partly measuring how busy the runner is. That is the same defect `
 layer B, arriving from the other direction — and this time it was my own change to the harness that
 perturbed what the harness measures.
 
-Deliberately **not** patched. The 150 ms is a claim about the latency a user's prompt waits for, not
-a threshold to raise until the build is green. Options are written up for a decision.
+**Resolved by fixing what the gate measured rather than what it permitted.** Four changes, two
+loosening and two tightening, in one commit:
+
+- **Layer C** now asserts `p95(script) < p95(bare) + 120ms`, calibrated against the same run's own
+  interpreter boot. On idle macOS that is a ~146ms ceiling — indistinguishable in strictness from the
+  old flat 150 — and on a slow Windows runner it scales with the platform instead of failing it. The
+  120ms is derived: twice the worst batched two-p95 noise measured under deliberate core saturation
+  (57.7ms), against real observed CI failures of 34.1 and 40.6ms.
+- **The absolute 150ms** is now asserted only under `DAYCAP_PERF=1`, on a machine someone quietened
+  on purpose. Written down as a loss, not glossed: **no CI leg asserts it.** It belongs in the
+  pre-release checklist, and it is now in HANDOFF §7.
+- **Layer A2** is new and is the compensation. `IMPLEMENTATION_PLAN.md:394` always specified layer A
+  as "read cache + parse stdin + format", but as built it timed `render()` alone — so the two
+  `readFileSync` calls, the only I/O on the hot path, were measured nowhere except through a whole
+  process spawn where Node's boot buries them. Now timed end to end, on every platform, budget 5ms
+  against a measured p95 of 0.045ms.
+- **Layer B tightened 30 → 20ms.** Loosening the absolute number without tightening the one that
+  measures our own code would have been a net loss dressed up as a fix.
+- **Layer D** finally exists, as `IMPLEMENTATION_PLAN.md:397` specified and nobody built: bare p95,
+  script p95, delta, median pair and headroom used, printed every run, asserting nothing. A perf
+  suite that speaks only when it fails cannot show a trend.
+
+### What the recheck turned up about the number itself
+
+**150 was never a spawn-time budget.** `IMPLEMENTATION_PLAN.md:362` defines it as an IN-PROCESS
+budget enforced by a self-timeout — "Self-timeout at 150 ms prints the degraded line and exits 0."
+That timer does not exist and cannot: the read path is fully synchronous, so no timer can fire while
+`readFileSync` blocks. Layer C inherited the number for a different quantity, and the CI matrix was
+merely the trigger that exposed it. Widened layer A2 is that claim's real home.
+
+Also corrected: an earlier note in this session called `p95`'s behaviour at n=30 an arithmetic bug.
+It is not. `Math.floor(30 * 0.95) = 28` is index 28, the 29th of 30 — exactly nearest-rank P95, the
+textbook estimator. The near-maximality is a property of n=30 and no index change fixes it; for a
+*ceiling* assertion it errs conservative, which is the right direction. The helper is untouched,
+because layer A shares it and any "small-n fix" would silently shift a passing, unrelated threshold.
+
+### Mutation-verified sensitivity ladder
+
+A perf gate never observed to fail is decoration, so it was made to fail on purpose (stall injected
+into `readJson`, file restored byte-identical afterwards):
+
+| injected regression | caught by |
+|---|---|
+| none | nothing — green, so the gates are not vacuous |
+| ~2 ms | **nothing** — the honest sensitivity floor |
+| ~6 ms | layer A2 |
+| ~30 ms | layer A2, layer B |
+| ~200 ms | layer A2, layer B, layer C |
+
+The ~2ms floor is recorded rather than tuned away: on a path costing 0.03ms it is a real multiple,
+but 2ms on a prompt is imperceptible, and chasing it would mean setting a budget close enough to the
+noise that the suite starts reporting the platform again — which is the exact mistake being fixed.

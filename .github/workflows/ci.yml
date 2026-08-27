@@ -30,11 +30,14 @@ jobs:
   #    runtime to 20 for the checks that are actually about our code. It is a real constraint of the
   #    toolchain, not of the product: nobody installing `lum` uses pnpm.
   #
-  # 2. Doubling the matrix DOUBLED THE LOAD and broke an unrelated test. Six concurrent jobs pushed
-  #    `layer C — absolute wall clock < 150ms p95` to 188ms on the Windows runner, which had passed
-  #    on the two PRs before it. Layer C measures absolute wall clock including Node's own boot, so
-  #    it is sensitive to exactly the contention an expanded matrix creates. One extra job on one OS
-  #    keeps that signal readable.
+  # 2. It used to be true that doubling the matrix broke `layer C`, and that was the second reason
+  #    this is one job rather than a matrix dimension. THAT CONSTRAINT IS GONE: layer C now
+  #    calibrates its ceiling against the same run's own bare-`node` p95 instead of a flat 150ms, so
+  #    runner contention moves both terms together and cancels. A performance gate dictating how much
+  #    of the shipped product gets tested was the tail wagging the dog, and it no longer does.
+  #
+  #    Kept as a separate job anyway, now purely for reason 1 — pnpm cannot start on Node 20, so the
+  #    install and the run need different interpreters, which a matrix dimension cannot express.
   #
   # Typecheck and tests only. Lint and build run dev tools whose own Node support is not a promise
   # this project makes to anyone.
