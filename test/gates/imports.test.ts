@@ -74,7 +74,7 @@ const FILES = sourceFiles(SRC);
 /**
  * Repo-relative path with POSIX separators.
  *
- * Windows produces `src\bin\lum.ts` where every other platform produces `src/bin/lum.ts`, so an
+ * Windows produces `src\bin\lum.ts` where every other platform produces `src/bin/daycap.ts`, so an
  * assertion naming a path fails there for a reason that has nothing to do with the rule. Every
  * comparison in this file goes through here.
  */
@@ -144,12 +144,12 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
     (dir) => {
       const namers = FILES.filter((f) => code(readFileSync(f, "utf8")).includes(dir));
       // If a second file ever needs this, that is a design conversation, not a quiet edit.
-      expect(namers.map(rel)).toEqual(["src/bin/lum.ts"]);
+      expect(namers.map(rel)).toEqual(["src/bin/daycap.ts"]);
     },
   );
 
   it("...and only ever joined with a settings file, never with a transcript directory", () => {
-    const installer = code(readFileSync(join(SRC, "bin", "lum.ts"), "utf8"));
+    const installer = code(readFileSync(join(SRC, "bin", "daycap.ts"), "utf8"));
     // Every allowed fragment must actually appear — otherwise this list quietly grows past what
     // the installer really needs, and the next person reads it as permission rather than record.
     for (const allowed of ALLOWED_PATHS) expect(installer).toContain(allowed);

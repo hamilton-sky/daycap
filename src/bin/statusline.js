@@ -18,18 +18,37 @@
  *     state ever prints a `$` numeral without a muted marker attached.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const STATE_DIR = join(homedir(), ".localusagemeter", "state");
+/**
+ * The state directory, preferring `.daycap` and falling back to the pre-rename name.
+ *
+ * The literals are DUPLICATED from `src/domain/brand.ts` rather than imported, and that is forced
+ * rather than sloppy: the import gate limits this file to node:fs/os/path/url, so any relative
+ * import fails the build. The gate is right to — this runs on every prompt and a dependency graph
+ * here is latency paid per render. `test/gates/imports.test.ts` asserts the two copies agree.
+ *
+ * The fallback is one `existsSync` on a path we were about to read anyway. Skipping it would mean a
+ * user who upgrades sees their spend silently reset to "no source" until they re-run install.
+ */
+const homeDirName = () => {
+  const current = join(homedir(), ".daycap");
+  return existsSync(current)
+    ? current
+    : existsSync(join(homedir(), ".localusagemeter"))
+      ? join(homedir(), ".localusagemeter")
+      : current;
+};
+const STATE_DIR = join(homeDirName(), "state");
 const SNAPSHOT = join(STATE_DIR, "today.json");
-const CONFIG = join(homedir(), ".localusagemeter", "config.json");
+const CONFIG = join(homeDirName(), "config.json");
 const ECHO = join(STATE_DIR, "stdin-echo.json");
 
-export const NO_SOURCE = "lum — (no source)";
-export const SOURCE_DOWN = "lum — (source down)";
+export const NO_SOURCE = "daycap — (no source)";
+export const SOURCE_DOWN = "daycap — (source down)";
 
 /** DESIGN §1: 77 green, 208 amber, 203 red, 246 muted. */
 const C256 = { green: "38;5;77", amber: "38;5;208", red: "38;5;203", muted: "38;5;246" };

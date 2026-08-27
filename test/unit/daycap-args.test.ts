@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs } from "../../src/bin/lum.ts";
+import { parseArgs } from "../../src/bin/daycap.ts";
 
 /**
  * Argument routing is pure and exported so it can be tested without spawning a process. The

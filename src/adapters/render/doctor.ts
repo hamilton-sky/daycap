@@ -9,6 +9,7 @@
  * No colour unless `--color`. This output gets pasted into issues.
  */
 
+import { CLI_NAME } from "../../domain/brand.ts";
 import type { Config, UsageSnapshot } from "../../domain/types.ts";
 import type { ResolutionAttempt } from "../source/ccusage.shellout.ts";
 
@@ -126,13 +127,13 @@ function humanAge(seconds: number): string {
  * when they need it.
  */
 export const REMEDY = [
-  "  To fix: install a collector, then run `lum doctor` again.",
+  `  To fix: install a collector, then run \`${CLI_NAME} doctor\` again.`,
   "    npm i -g ccusage@20      # Claude Code + Codex, zero config",
-  "  Then `lum install` to wire up the statusline and the refresh hook.",
+  `  Then \`${CLI_NAME} install\` to wire up the statusline and the refresh hook.`,
 ];
 
 export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: number } {
-  const lines: string[] = ["lum doctor"];
+  const lines: string[] = [`${CLI_NAME} doctor`];
 
   // --- source: one line per rung of the ladder, named and located -----------------------------
   if (facts.available) {

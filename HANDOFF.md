@@ -1,6 +1,6 @@
-# HANDOFF — local-usage-meter (`lum`)
+# HANDOFF — daycap (`daycap`)
 
-**State as of 2026-08-27.** `main` @ `7664f55`. 636 tests passing, 12 skipped, **CI green on macOS,
+**State as of 2026-08-27.** `main` @ `530dadd` plus the rename branch. 644 tests passing, 12 skipped, **CI green on macOS,
 Linux and Windows** — PR #11 merged, and the Windows leg genuinely ran the P3-4 layer-B assertion
 that used to flake (4563 ms, pass), which was the point of putting it through CI.
 
@@ -37,8 +37,8 @@ can do this too, with a proxy, a Postgres DB and re-pointed credentials. See
 ```bash
 pnpm install && pnpm verify        # typecheck, lint, build, 483 tests
 npm i -g ccusage@20                # the collector (if not already present)
-node dist/lum.js today             # a real number from your own transcripts
-node dist/lum.js doctor            # why the number is what it is
+node dist/daycap.js today             # a real number from your own transcripts
+node dist/daycap.js doctor            # why the number is what it is
 ```
 
 Six commands: `today`, `doctor`, `refresh`, `install [--write] [--guard] [--codex]`,
@@ -81,7 +81,7 @@ src/app/
   install.ts         the settings.json block, and the Codex hooks.json block (P5-2)
 
 src/bin/
-  lum.ts             CLI + the single composition root shared by today/refresh
+  daycap.ts          CLI + the single composition root shared by today/refresh
   statusline.js      HOT PATH. node:fs/os/path/url only. Always exit 0
   guard.js           HOT PATH. PreToolUse enforcement, Claude Code AND Codex. Fails OPEN
 ```
@@ -113,7 +113,7 @@ guard**. Our collector read is ~90 ms warm and ~1 s cold — either would silent
    *and* `guard.enabled` in config.
 7. **Never parse a transcript.** `~/.claude/projects`, `.jsonl`, `.codex/sessions`, `.cursor` are
    forbidden in `src/`. `~/.claude/settings.json` and `~/.codex/hooks.json` are the two narrow
-   exceptions, both for the installer, and only `src/bin/lum.ts` may name either directory. The
+   exceptions, both for the installer, and only `src/bin/daycap.ts` may name either directory. The
    distinction is CONFIG the user owns versus DATA a collector owns — not "which vendor".
 
 ---

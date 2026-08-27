@@ -37,7 +37,7 @@ const facts = (over: Partial<DoctorFacts> = {}): DoctorFacts => ({
   snapshotAgeSeconds: 30,
   latch: { present: false, recovered: false, firedToday: [] },
   config: { ...DEFAULT_CONFIG, dailyBudgetUsd: 10 },
-  configPath: `${HOME}/.localusagemeter/config.json`,
+  configPath: `${HOME}/.daycap/config.json`,
   configWarnings: [],
   echoSeen: null,
   unpriceableFound: [],
@@ -96,7 +96,7 @@ describe("lum doctor — shape", () => {
 describe("lum doctor — privacy", () => {
   it("abbreviates the home directory to ~, so a username is not pasted into an issue", () => {
     const text = out(facts());
-    expect(text).toContain("~/.localusagemeter/config.json");
+    expect(text).toContain("~/.daycap/config.json");
     expect(text).not.toContain("/Users/alice");
   });
 

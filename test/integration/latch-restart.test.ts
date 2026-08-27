@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// BIN is derived from package.json, not written down here — see the module for why.
+import { BIN, BUILT } from "../support/bin-path.ts";
 
 /**
  * P2-5 exit criteria, and P2-3 acceptance #2: a GENUINE restart test.
@@ -23,9 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  */
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const BIN = join(root, "dist", "lum.js");
 const FAKE = join(root, "test", "stubs", "fake-ccusage-bin.mjs");
-const built = existsSync(BIN);
 
 let home: string;
 let log: string;
@@ -33,12 +33,12 @@ let log: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "lum-latch-"));
   log = join(home, "notifications.log");
-  mkdirSync(join(home, ".localusagemeter"), { recursive: true });
+  mkdirSync(join(home, ".daycap"), { recursive: true });
   const notify = join(home, "notify.sh");
   writeFileSync(notify, `#!/bin/sh\necho "$2" >> "${log}"\n`);
   chmodSync(notify, 0o755);
   writeFileSync(
-    join(home, ".localusagemeter", "config.json"),
+    join(home, ".daycap", "config.json"),
     JSON.stringify({
       dailyBudgetUsd: 10,
       thresholds: [0.8, 1],
@@ -69,7 +69,7 @@ const fired = (): string[] =>
         .filter((l) => l.trim().length > 0)
     : [];
 
-const maybe = built && process.platform !== "win32" ? describe : describe.skip;
+const maybe = BUILT && process.platform !== "win32" ? describe : describe.skip;
 
 maybe("latch across separate processes", () => {
   it("0.8 then 1.0 fire exactly once each, with no re-fire on restart or dip", () => {
@@ -96,7 +96,7 @@ maybe("latch across separate processes", () => {
     run(9);
     expect(fired()).toHaveLength(1);
 
-    const latch = join(home, ".localusagemeter", "state", "latch.json");
+    const latch = join(home, ".daycap", "state", "latch.json");
     writeFileSync(latch, '{"schema":1,"usageDay":"2026'); // truncated mid-object
 
     run(12); // would cross 1.0 — but an unreadable latch must silence the day

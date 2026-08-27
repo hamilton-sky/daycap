@@ -10,9 +10,10 @@
  * for, which is strictly worse than showing nothing. Unknown money is an em dash, everywhere.
  */
 
+import { CLI_NAME } from "../../domain/brand.ts";
 import type { Config, UsageSnapshot } from "../../domain/types.ts";
 
-export const NO_SOURCE = "lum — (no source)";
+export const NO_SOURCE = `${CLI_NAME} — (no source)`;
 
 /** Older than this and the figure is marked with `⋯` rather than presented as current. */
 export const STALE_AFTER_SECONDS = 15 * 60;
