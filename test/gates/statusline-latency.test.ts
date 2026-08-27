@@ -252,13 +252,23 @@ spawny("P3-4 layers B, C and D — spawn cost", () => {
     spawns = { bare, script, pairs };
   }, BUDGET_MS);
 
-  it("layer B — marginal cost over a bare node boot is < 20ms", () => {
+  it("layer B — marginal cost over a bare node boot is < 30ms", () => {
     const marginal = median(spawns.pairs);
     const sorted = [...spawns.pairs].sort((a, b) => a - b);
-    // 20, tightened from 30 in the same commit that loosened layer C. Worst median-of-pairs under
-    // deliberate core saturation was 8.7ms, so this is 2.3x that and still ~5x the true ~4ms cost.
-    // Loosening the absolute number without tightening the one that actually measures our code
-    // would have been a net loss of coverage dressed up as a fix.
+    // 30, and it STAYS 30. This was tightened to 20 in an earlier draft of this commit, on the
+    // reasoning that loosening layer C should be paid for by tightening the number that actually
+    // measures our code. The justification was 8.7ms — the worst median-of-pairs under deliberate
+    // core saturation, measured on macOS.
+    //
+    // Layer D disproved it within one CI run, which is the entire reason layer D exists. The Windows
+    // runner reported median pairs of 17.5, 11.0, 5.3 and 17.2ms across four jobs — the SAME
+    // statistic, on the platform that matters, twice as large as the macOS-saturation figure the
+    // 20ms was derived from. A 20ms limit against a 17.5ms observation is 1.14x margin, which is a
+    // flake waiting for a busy afternoon.
+    //
+    // So 30 is now evidence-based rather than inherited: 1.7x the worst real Windows observation,
+    // and ~7x the ~4ms true cost on an idle machine. Extrapolating one platform's noise onto another
+    // was the mistake; do not repeat it by tightening this from macOS numbers again.
     expect(
       marginal,
       `median ${marginal.toFixed(1)}ms over ${runs} interleaved pairs ` +

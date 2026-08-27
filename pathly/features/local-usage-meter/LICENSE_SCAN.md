@@ -169,8 +169,13 @@ loosening and two tightening, in one commit:
   `readFileSync` calls, the only I/O on the hot path, were measured nowhere except through a whole
   process spawn where Node's boot buries them. Now timed end to end, on every platform, budget 5ms
   against a measured p95 of 0.045ms.
-- **Layer B tightened 30 → 20ms.** Loosening the absolute number without tightening the one that
-  measures our own code would have been a net loss dressed up as a fix.
+- **Layer B stays at 30ms**, and the attempt to tighten it is worth recording. It was set to 20 in
+  an earlier draft, justified by the worst median-of-pairs under deliberate core saturation — 8.7ms,
+  measured on macOS. **Layer D disproved that within one CI run**, which is precisely why layer D
+  exists: the Windows runner reported median pairs of 17.5, 11.0, 5.3 and 17.2ms for the same
+  statistic, twice the macOS figure. 20ms against a 17.5ms observation is 1.14x margin — a flake
+  waiting for a busy afternoon. 30 is now evidence-based rather than inherited: 1.7x the worst real
+  Windows observation. Extrapolating one platform's noise onto another was the mistake.
 - **Layer D** finally exists, as `IMPLEMENTATION_PLAN.md:397` specified and nobody built: bare p95,
   script p95, delta, median pair and headroom used, printed every run, asserting nothing. A perf
   suite that speaks only when it fails cannot show a trend.
@@ -205,3 +210,19 @@ into `readJson`, file restored byte-identical afterwards):
 The ~2ms floor is recorded rather than tuned away: on a path costing 0.03ms it is a real multiple,
 but 2ms on a prompt is imperceptible, and chasing it would mean setting a budget close enough to the
 noise that the suite starts reporting the platform again — which is the exact mistake being fixed.
+
+### Two more things the first CI run of this change turned up
+
+**A negative delta, and what it proves.** One Windows job reported `bare p95 447.4ms | script p95
+233.5ms | delta -213.9ms`. The bare interpreter's p95 came out *higher* than the script's, which is
+impossible as a measurement of our code and is therefore direct evidence that a batched p95 on a
+loaded runner reports the scheduler. Layer C passes trivially in that state rather than failing
+falsely, and layer D says so out loud at `headroom used -178%` — which is the correct behaviour for a
+gate whose input has become noise, and the reason the median-of-pairs in layer B is the real guard.
+
+**An unrelated flake, fixed by the same insight.** `AtomicFileStore — a reader never observes a torn
+file under concurrent writers` timed out at vitest's 5000ms default on that same saturated runner —
+*while asserting nothing about time*. It takes ~1.2s locally. A timeout is a latency assertion whether
+or not you meant it as one, and leaving the default there meant "atomicity holds" and "this runner is
+not busy" shared one red light. Both atomicity cases now carry an explicit 120s budget with that
+reasoning attached.
