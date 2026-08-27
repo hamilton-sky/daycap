@@ -11,11 +11,13 @@
   "packageManager": "pnpm@11.23.0",
   "bin": {
     "lum": "./dist/lum.js",
-    "lum-statusline": "./src/bin/statusline.js"
+    "lum-statusline": "./src/bin/statusline.js",
+    "lum-guard": "./src/bin/guard.js"
   },
   "files": [
     "dist",
-    "src/bin/statusline.js"
+    "src/bin/statusline.js",
+    "src/bin/guard.js"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

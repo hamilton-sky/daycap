@@ -51,10 +51,21 @@ export function hookEntry(command: string): SettingsBlock {
  * contains hooks they wrote themselves, and an installer that flattens it is an installer nobody
  * runs twice.
  */
+export type InstallOptions = {
+  /**
+   * Add the PreToolUse guard hook. Separate from the rest on purpose: the statusline and the
+   * refresh hook only ever ADD information, while the guard can STOP the user's work. Bundling an
+   * enforcement mechanism into a convenience install is how a tool loses trust in one release.
+   */
+  guard?: boolean;
+  guardPath?: string;
+};
+
 export function planInstall(
   existing: unknown,
   lumCommand: string,
   statuslinePath: string,
+  options: InstallOptions = {},
 ): InstallPlan {
   const base: SettingsBlock = isRecord(existing) ? { ...existing } : {};
   const changes: string[] = [];
@@ -88,6 +99,23 @@ export function planInstall(
     }
     hooks[event] = list;
   }
+  if (options.guard === true && options.guardPath !== undefined) {
+    const list = Array.isArray(hooks.PreToolUse) ? [...(hooks.PreToolUse as unknown[])] : [];
+    const already = list.some(
+      (entry) =>
+        isRecord(entry) &&
+        Array.isArray(entry.hooks) &&
+        entry.hooks.some((h) => isRecord(h) && h.command === options.guardPath),
+    );
+    if (!already) {
+      // NOT async, and NOT the refresh hook's 10s timeout. An async hook cannot block at all, and
+      // a timed-out hook fails OPEN — so the guard must be synchronous and fast. It reads one
+      // cached file; 5s is a ceiling for a pathological filesystem, not a budget.
+      list.push({ hooks: [{ type: "command", command: options.guardPath, timeout: 5 }] });
+      changes.push("add PreToolUse guard hook");
+    }
+    hooks.PreToolUse = list;
+  }
   base.hooks = hooks;
 
   return { merged: base, changes };
@@ -110,5 +138,9 @@ export function renderPlan(plan: InstallPlan, settingsPath: string): string[] {
     "The Stop hook is what keeps the statusline from going stale. Without it the meter only",
     "refreshes when you run `lum` by hand, and a budget guardrail that is quietly out of date",
     "is worse than none.",
+    "",
+    "`lum install --guard` additionally installs a PreToolUse hook that DENIES tool calls once",
+    "you are over the allowance. That is enforcement, not a warning — it is off unless you ask,",
+    "and it also needs `guard.enabled: true` in your config before it will deny anything.",
   ];
 }

@@ -121,11 +121,27 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
     expect(offenders.map(rel)).toEqual([]);
   });
 
-  it("statusline.js imports node:fs, node:os, node:path and node:url — and nothing else", () => {
-    // It runs on every prompt. Every extra import is latency the user pays per keystroke-ish, and
-    // anything beyond these four would mean it had stopped being a thin cache reader.
-    const text = code(readFileSync(join(SRC, "bin", "statusline.js"), "utf8"));
+  /**
+   * The hot path: files Claude Code executes as part of a turn, not files the user runs.
+   *
+   * `statusline.js` runs on every prompt — every extra import is latency paid per render.
+   * `guard.js` is stricter still: a timed-out hook does NOT block ("you shouldn't count on a
+   * stalled hook to act as a gate"), so a slow guard is an ABSENT guard. Anything beyond these
+   * four modules would mean either had stopped being a thin cache reader.
+   */
+  const HOT_PATH = ["statusline.js", "guard.js"];
+  const ALLOWED = new Set(["node:fs", "node:os", "node:path", "node:url"]);
+
+  it.each(HOT_PATH)("%s imports node:fs/os/path/url — and nothing else", (file) => {
+    const text = code(readFileSync(join(SRC, "bin", file), "utf8"));
     const imports = [...text.matchAll(/from\s*["'`]([^"'`]+)["'`]/g)].map((m) => m[1]);
-    expect(new Set(imports)).toEqual(new Set(["node:fs", "node:os", "node:path", "node:url"]));
+    expect(new Set(imports)).toEqual(ALLOWED);
+  });
+
+  it.each(HOT_PATH)("%s spawns nothing — it reads a cache, it does not ask a collector", (file) => {
+    const text = code(readFileSync(join(SRC, "bin", file), "utf8"));
+    for (const banned of ["child_process", "node:net", "node:http", "execFile", "spawn("]) {
+      expect(text, `${file} must not reference ${banned}`).not.toContain(banned);
+    }
   });
 });

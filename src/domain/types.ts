@@ -138,6 +138,25 @@ export type Config = {
     command?: readonly string[];
   };
   /**
+   * Hard enforcement. OFF by default, and deliberately so.
+   *
+   * A warning that is ignored costs you money; a block that fires wrongly costs you your work.
+   * Those are not symmetric, so this is opt-in and every default here is the cautious one.
+   */
+  guard: {
+    enabled: boolean;
+    /** Fraction of the allowance at which tool calls start being denied. */
+    denyAt: number;
+    /**
+     * `deny` uses the documented PreToolUse contract and exits 0 — if the contract ever changes,
+     * it fails OPEN, which is the safe direction. `hard` additionally exits 2, which blocks
+     * unconditionally. `hard` is stronger and more brittle; the user picks.
+     */
+    mode: "deny" | "hard";
+    /** Tool names that are never denied, e.g. ["Read"] to keep inspection possible while blocked. */
+    allowTools: readonly string[];
+  };
+  /**
    * IANA zone defining the usage day. `null` = the host's local zone.
    *
    * PRE-G (OPEN): budi's HTTP API buckets by UTC while its CLI and the user's wall clock use
