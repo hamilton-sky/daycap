@@ -73,8 +73,19 @@ const FORBIDDEN_MODULES = [
  */
 const FORBIDDEN_PATHS = [".claude/projects", ".codex/sessions", ".cursor", ".copilot", ".jsonl"];
 
-/** The one path under a CLI's directory we may touch, and only to write the user's own settings. */
-const ALLOWED_PATHS = [".claude", "settings.json"];
+/**
+ * The paths under a CLI's directory we may touch, and only to write the user's own settings.
+ *
+ * WHY THIS GREW IN P5-2, written down here because the house rule is that a gate is never loosened
+ * quietly: `lum install --codex` writes `~/.codex/hooks.json`. That is the SAME data-vs-config
+ * distinction this gate already forced into the open for `.claude` — `hooks.json` is configuration
+ * the user owns and we edit on an explicit `--write`, whereas `.codex/sessions` is transcript data
+ * and stays forbidden above, for every file, with no exception.
+ *
+ * What is deliberately NOT loosened: the one-file rule below. Exactly one module may name either
+ * directory. If a second ever needs to, that is a design conversation, not a quiet edit.
+ */
+const ALLOWED_PATHS = [".claude", ".codex", "settings.json", "hooks.json"];
 
 describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => {
   it("finds source files to check", () => {
@@ -97,14 +108,23 @@ describe("gate: import boundary (ADR-v2-001 — never parse a log file)", () => 
     ).toEqual([]);
   });
 
-  it("the settings.json allowance is narrow — only the installer may name .claude at all", () => {
-    const namers = FILES.filter((f) => code(readFileSync(f, "utf8")).includes(".claude"));
-    // If a second file ever needs this, that is a design conversation, not a quiet edit.
-    expect(namers.map(rel)).toEqual(["src/bin/lum.ts"]);
+  it.each([".claude", ".codex"])(
+    "the settings allowance is narrow — only the installer may name %s at all",
+    (dir) => {
+      const namers = FILES.filter((f) => code(readFileSync(f, "utf8")).includes(dir));
+      // If a second file ever needs this, that is a design conversation, not a quiet edit.
+      expect(namers.map(rel)).toEqual(["src/bin/lum.ts"]);
+    },
+  );
+
+  it("...and only ever joined with a settings file, never with a transcript directory", () => {
     const installer = code(readFileSync(join(SRC, "bin", "lum.ts"), "utf8"));
-    // ...and only ever joined with settings.json, never with a transcript directory.
-    expect(installer).toContain(ALLOWED_PATHS[1]);
+    // Every allowed fragment must actually appear — otherwise this list quietly grows past what
+    // the installer really needs, and the next person reads it as permission rather than record.
+    for (const allowed of ALLOWED_PATHS) expect(installer).toContain(allowed);
+    // The two directory names that would mean we had started reading transcripts after all.
     expect(installer).not.toContain("projects");
+    expect(installer).not.toContain("sessions");
   });
 
   it("nothing under src/ imports from test/", () => {

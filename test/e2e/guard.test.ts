@@ -43,18 +43,19 @@ function writeConfig(guard: Record<string, unknown> | undefined): void {
   );
 }
 
-function run(input = '{"tool_name":"Bash"}'): { out: string; code: number } {
+function run(input = '{"tool_name":"Bash"}'): { out: string; err: string; code: number } {
   try {
     const out = execFileSync(process.execPath, [GUARD], {
       env: { ...process.env, HOME: home, USERPROFILE: home },
       encoding: "utf8",
       input,
       timeout: 20_000,
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    return { out, code: 0 };
+    return { out, err: "", code: 0 };
   } catch (e) {
-    const err = e as { stdout?: string; status?: number };
-    return { out: err.stdout ?? "", code: err.status ?? -1 };
+    const err = e as { stdout?: string; stderr?: string; status?: number };
+    return { out: err.stdout ?? "", err: err.stderr ?? "", code: err.status ?? -1 };
   }
 }
 
@@ -154,5 +155,90 @@ describe("guard — it reads a cache, never a collector", () => {
       input: '{"tool_name":"Bash"}',
     });
     expect(out).toContain("deny");
+  });
+});
+
+/**
+ * P5-2 — the same process, invoked as a Codex hook.
+ *
+ * There is no Codex-specific binary and no second `decide()`. Codex CLI reads the same `tool_name`
+ * off stdin and honours the same `hookSpecificOutput` payload, so these drive the real process with
+ * a real Codex `PreToolUse` payload and assert the contract Codex actually enforces.
+ */
+describe("guard — as a real Codex hook process", () => {
+  /** A Codex PreToolUse payload: canonical tool name, aliases, and its bypass permission_mode. */
+  const codexInput = (over: Record<string, unknown> = {}): string =>
+    JSON.stringify({
+      session_id: "s1",
+      turn_id: "t1",
+      cwd: "/tmp/project",
+      permission_mode: "bypassPermissions",
+      tool_name: "Bash",
+      matcher_aliases: [],
+      tool_use_id: "call_1",
+      tool_input: { command: "echo hi" },
+      ...over,
+    });
+
+  it("emits the identical deny payload Codex documents", () => {
+    writeSnapshot();
+    writeConfig({ enabled: true, denyAt: 1, mode: "deny", allowTools: [] });
+    const { out, code } = run(codexInput());
+    const parsed = JSON.parse(out) as { hookSpecificOutput: Record<string, string> };
+    expect(parsed.hookSpecificOutput).toEqual({
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: expect.stringContaining("120%"),
+    });
+    expect(code).toBe(0);
+  });
+
+  /**
+   * Codex rejects `permissionDecision:deny` without a non-empty reason and then lets the call
+   * through. An empty reason there is not an ugly block — it is no block.
+   */
+  it("never emits a deny with an empty reason", () => {
+    writeSnapshot();
+    writeConfig({ enabled: true, denyAt: 1, mode: "deny", allowTools: [] });
+    const { out } = run(codexInput());
+    const parsed = JSON.parse(out) as { hookSpecificOutput: { permissionDecisionReason: string } };
+    expect(parsed.hookSpecificOutput.permissionDecisionReason.trim()).not.toBe("");
+  });
+
+  it("honours allowTools through Codex's matcher aliases", () => {
+    writeSnapshot();
+    writeConfig({ enabled: true, denyAt: 1, mode: "deny", allowTools: ["Edit"] });
+    // Codex reports apply_patch as the canonical name; Edit arrives only as an alias.
+    const exempt = run(
+      codexInput({ tool_name: "apply_patch", matcher_aliases: ["Edit", "Write"] }),
+    );
+    expect(exempt.out).toBe("");
+    expect(exempt.code).toBe(0);
+
+    const blocked = run(codexInput({ tool_name: "apply_patch", matcher_aliases: [] }));
+    expect(blocked.out).toContain("deny");
+  });
+
+  /**
+   * Both hosts take an exit-2 block's reason from STDERR. Claude Code reads the stdout JSON too,
+   * so this was invisible there; Codex does not, so hard mode would have blocked saying nothing.
+   */
+  it("puts the reason on stderr in hard mode, where an exit-2 host looks for it", () => {
+    writeSnapshot();
+    writeConfig({ enabled: true, denyAt: 1, mode: "hard", allowTools: [] });
+    const { out, err, code } = run(codexInput());
+    expect(code).toBe(2);
+    expect(err).toContain("120%");
+    // ...and still on stdout, which is where Claude Code reads it.
+    expect(out).toContain("deny");
+  });
+
+  it("fails open on a Codex payload it cannot parse, exactly as on Claude Code", () => {
+    writeSnapshot();
+    writeConfig({ enabled: true, denyAt: 1, mode: "hard", allowTools: [] });
+    writeFileSync(join(home, ".localusagemeter", "state", "today.json"), "{oops");
+    const { out, code } = run(codexInput());
+    expect(out).toBe("");
+    expect(code).toBe(0);
   });
 });

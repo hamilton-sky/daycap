@@ -121,6 +121,99 @@ export function planInstall(
   return { merged: base, changes };
 }
 
+/**
+ * The Codex hook block — `~/.codex/hooks.json`. P5-2.
+ *
+ * Codex's hook config is near-identical to Claude Code's, which is why `guard.js` serves both with
+ * no forked logic. Three things differ enough to be worth stating:
+ *
+ *  1. **There is no statusline.** `tui.status_line` takes a closed list of Codex's own built-in
+ *     item identifiers, so no third party can render into the footer (P5-1, verified). This block
+ *     is therefore hooks-only, and that is a schema-level ceiling rather than something left TODO.
+ *  2. **`timeout` is never optional here.** Codex defaults a hook to 600 SECONDS where Claude Code
+ *     uses 60. Our reasoning has always been "a slow guard is an absent guard"; on Codex the same
+ *     omission inverts into a tool call hanging for ten minutes. Both entries below pin it.
+ *  3. **The refresh hooks are load-bearing, not a convenience.** The guard refuses to block on a
+ *     snapshot older than `MAX_BLOCK_AGE_SECONDS` (120s). Without something refreshing the cache
+ *     each turn, a Codex guard would be enabled, correct, and permanently failing open — the exact
+ *     "reports safety that is not there" failure this installer exists to prevent.
+ */
+export function planCodexInstall(
+  existing: unknown,
+  lumCommand: string,
+  options: InstallOptions = {},
+): InstallPlan {
+  const base: SettingsBlock = isRecord(existing) ? { ...existing } : {};
+  const changes: string[] = [];
+  const hooks: Record<string, unknown> = isRecord(base.hooks) ? { ...base.hooks } : {};
+
+  const refresh = `${lumCommand} refresh`;
+  for (const event of ["SessionStart", "Stop"] as const) {
+    const list = Array.isArray(hooks[event]) ? [...(hooks[event] as unknown[])] : [];
+    const already = list.some(
+      (entry) =>
+        isRecord(entry) &&
+        Array.isArray(entry.hooks) &&
+        entry.hooks.some((h) => isRecord(h) && h.command === refresh),
+    );
+    if (!already) {
+      list.push(hookEntry(refresh));
+      changes.push(`add ${event} hook`);
+    }
+    hooks[event] = list;
+  }
+
+  if (options.guard === true && options.guardPath !== undefined) {
+    const list = Array.isArray(hooks.PreToolUse) ? [...(hooks.PreToolUse as unknown[])] : [];
+    const already = list.some(
+      (entry) =>
+        isRecord(entry) &&
+        Array.isArray(entry.hooks) &&
+        entry.hooks.some((h) => isRecord(h) && h.command === options.guardPath),
+    );
+    if (!already) {
+      // No `matcher`, so every tool Codex routes through the hook path is covered. Synchronous and
+      // pinned short, for the same reasons as the Claude Code entry.
+      list.push({ hooks: [{ type: "command", command: options.guardPath, timeout: 5 }] });
+      changes.push("add PreToolUse guard hook");
+    }
+    hooks.PreToolUse = list;
+  }
+
+  base.hooks = hooks;
+  return { merged: base, changes };
+}
+
+/**
+ * What `lum install --codex` prints.
+ *
+ * The trust paragraph is not boilerplate. Codex refuses to run a non-managed hook until the user
+ * reviews it, and it pins that trust to the hook's HASH — so this file landing on disk installs
+ * nothing until `/hooks` is opened, and any later edit silently disarms it again. An installer that
+ * printed "Installed" and stopped would be claiming a guard the user does not yet have.
+ */
+export function renderCodexPlan(plan: InstallPlan, hooksPath: string): string[] {
+  if (plan.changes.length === 0) {
+    return [`lum is already installed in ${hooksPath} — nothing to do.`];
+  }
+  return [
+    `Add this to ${hooksPath}:`,
+    "",
+    JSON.stringify({ hooks: plan.merged.hooks }, null, 2),
+    "",
+    `Changes: ${plan.changes.join(", ")}`,
+    "",
+    "Re-run with --write to apply it (a .bak backup is written first).",
+    "",
+    "THEN, in Codex, run `/hooks` and trust them. Codex will not run a hook you have not",
+    "reviewed, and it records that trust against the hook's hash — so editing this file later",
+    "turns the hooks back off until you re-trust them. Until you do, nothing here runs.",
+    "",
+    "Codex has no statusline a third party can write into, so `lum` installs no ambient display",
+    "there — the number is available via `lum today` and `lum doctor`.",
+  ];
+}
+
 /** What `lum install` prints when you do not pass `--write`. */
 export function renderPlan(plan: InstallPlan, settingsPath: string): string[] {
   if (plan.changes.length === 0) {
