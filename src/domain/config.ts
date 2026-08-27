@@ -21,6 +21,9 @@ export const DEFAULT_CONFIG: Config = {
   primarySignal: "auto",
   pacing: false,
   notifications: { enabled: false },
+  // Every default here is the cautious one: off, only at 100%, fail-open mode, and Read exempt so
+  // a blocked session can still be inspected.
+  guard: { enabled: false, denyAt: 1, mode: "deny", allowTools: ["Read"] },
   timezone: null,
 };
 
@@ -127,6 +130,25 @@ export function parseConfig(raw: unknown): ConfigResult {
     }
   } else if (notifications !== undefined) {
     warnings.push("notifications must be { enabled: boolean }; notifications off");
+  }
+
+  const guard = raw.guard;
+  if (isRecord(guard)) {
+    const next = { ...DEFAULT_CONFIG.guard };
+    if (typeof guard.enabled === "boolean") next.enabled = guard.enabled;
+    if (typeof guard.denyAt === "number" && Number.isFinite(guard.denyAt) && guard.denyAt > 0) {
+      next.denyAt = guard.denyAt;
+    } else if (guard.denyAt !== undefined) {
+      warnings.push("guard.denyAt must be a number > 0; using 1.0");
+    }
+    if (guard.mode === "deny" || guard.mode === "hard") next.mode = guard.mode;
+    else if (guard.mode !== undefined) warnings.push('guard.mode must be "deny" or "hard"');
+    const allow = stringArray(guard.allowTools);
+    if (allow !== null) next.allowTools = allow;
+    else if (Array.isArray(guard.allowTools)) next.allowTools = [];
+    cfg.guard = next;
+  } else if (guard !== undefined) {
+    warnings.push("guard must be an object; enforcement stays off");
   }
 
   const tz = raw.timezone;

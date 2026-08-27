@@ -15,6 +15,7 @@ const config = (over: Partial<Config> = {}): Config => ({
   primarySignal: "auto",
   pacing: false,
   notifications: { enabled: false },
+  guard: { enabled: false, denyAt: 1, mode: "deny", allowTools: [] },
   timezone: "UTC",
   ...over,
 });

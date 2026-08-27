@@ -42,6 +42,7 @@ Usage:
   lum doctor           which collector was found, how fresh it is, what is missing
   lum refresh          re-read the collector and update the cached snapshot
   lum install          print the Claude Code settings block (--write to apply)
+                       --guard also installs the PreToolUse enforcement hook
   lum --version        print the version
   lum --help           print this message
 `;
@@ -103,12 +104,16 @@ export async function runRefresh(home: string = homedir()): Promise<number> {
  * it). Probing beats guessing: writing a path that does not exist into the user's settings.json
  * is a broken statusline they will discover at the worst moment.
  */
-function resolveStatuslinePath(): string {
+function resolveBinPath(file: string): string {
   const candidates = [
-    new URL("./statusline.js", import.meta.url), // dev: src/bin/lum.ts -> src/bin/statusline.js
-    new URL("../src/bin/statusline.js", import.meta.url), // built: dist/lum.js -> src/bin/...
+    new URL(`./${file}`, import.meta.url), // dev: src/bin/lum.ts -> src/bin/<file>
+    new URL(`../src/bin/${file}`, import.meta.url), // built: dist/lum.js -> src/bin/<file>
   ].map((u) => fileURLToPath(u));
   return candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1] ?? "";
+}
+
+function resolveStatuslinePath(): string {
+  return resolveBinPath("statusline.js");
 }
 
 /**
@@ -176,14 +181,21 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
 }
 
 /** `lum install` — P3-5 + P3-6. Prints the settings block; `--write` applies it after a backup. */
-export async function runInstall(write: boolean, home: string = homedir()): Promise<number> {
+export async function runInstall(
+  write: boolean,
+  guard = false,
+  home: string = homedir(),
+): Promise<number> {
   const settingsPath = join(home, ".claude", "settings.json");
   const existing = await readFile(settingsPath, "utf8")
     .then((t) => JSON.parse(t) as unknown)
     .catch(() => null);
 
   const statuslinePath = resolveStatuslinePath();
-  const plan = planInstall(existing, "lum", statuslinePath);
+  const plan = planInstall(existing, "lum", statuslinePath, {
+    guard,
+    guardPath: resolveBinPath("guard.js"),
+  });
 
   if (!write) {
     process.stdout.write(`${renderPlan(plan, settingsPath).join("\n")}\n`);
@@ -297,7 +309,7 @@ async function main(argv: readonly string[]): Promise<number> {
     case "refresh":
       return await runRefresh();
     case "install":
-      return await runInstall(argv.includes("--write"));
+      return await runInstall(argv.includes("--write"), argv.includes("--guard"));
     case "doctor":
       return await runDoctor();
   }
