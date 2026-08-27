@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * start with a shebang.
  *
  * This existed as a real defect: `bin.lum` pointed at `./dist/bin/lum.js` while tsdown flattens
- * its entry to `dist/lum.js`, AND `src/bin/lum.ts` carried no shebang — so `npm i -g` installed a
+ * its entry to `dist/lum.js`, AND `src/bin/daycap.ts` carried no shebang — so `npm i -g` installed a
  * binary that was both missing and non-executable. Nothing caught it, because `pnpm verify` never
  * exercised the bin and the package is `private: true`.
  *

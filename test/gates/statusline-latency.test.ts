@@ -45,7 +45,7 @@ const median = (xs: number[]): number => {
 let home: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "lum-perf-"));
-  const state = join(home, ".localusagemeter", "state");
+  const state = join(home, ".daycap", "state");
   mkdirSync(state, { recursive: true });
   writeFileSync(
     join(state, "today.json"),
@@ -64,10 +64,7 @@ beforeEach(() => {
       dayBoundaryApprox: false,
     }),
   );
-  writeFileSync(
-    join(home, ".localusagemeter", "config.json"),
-    JSON.stringify({ dailyBudgetUsd: 10 }),
-  );
+  writeFileSync(join(home, ".daycap", "config.json"), JSON.stringify({ dailyBudgetUsd: 10 }));
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 

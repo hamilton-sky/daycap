@@ -22,6 +22,7 @@ import { runAlerts } from "../app/alert.ts";
 import { planCodexInstall, planInstall, renderCodexPlan, renderPlan } from "../app/install.ts";
 import { isLatchState, LATCH_KEY, type LatchState } from "../app/latch.ts";
 import { buildSnapshot, SNAPSHOT_KEY, snapshotAgeSeconds } from "../app/meter.ts";
+import { CLI_NAME, LEGACY_STATE_DIR_NAME, STATE_DIR_NAME } from "../domain/brand.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
 import { markerDirFor, UNPRICEABLE_TOOLS } from "../domain/surfaces.ts";
@@ -126,7 +127,7 @@ function resolveStatuslinePath(): string {
  * intermittent fault impossible to catch. It reports what is on disk right now.
  */
 export async function runDoctor(home: string = homedir()): Promise<number> {
-  const configPath = join(home, ".localusagemeter", "config.json");
+  const configPath = configPathFor(home);
   const configText = await readFile(configPath, "utf8").catch(() => null);
   const { config, warnings } = parseConfigText(configText);
 
@@ -224,8 +225,11 @@ export async function runInstall(
 
   const guardPath = resolveBinPath("guard.js");
   const plan = codex
-    ? planCodexInstall(existing, "lum", { guard, guardPath })
-    : planInstall(existing, "lum", resolveStatuslinePath(), { guard, guardPath });
+    ? // CLI_NAME, never a literal. This string is persisted into the USER's settings.json as
+      // `"command": "<name> refresh"`, so a rename that missed it would leave every existing install
+      // invoking a command that no longer exists — and a failed hook is silent.
+      planCodexInstall(existing, CLI_NAME, { guard, guardPath })
+    : planInstall(existing, CLI_NAME, resolveStatuslinePath(), { guard, guardPath });
 
   if (!write) {
     const rendered = codex ? renderCodexPlan(plan, settingsPath) : renderPlan(plan, settingsPath);
@@ -266,9 +270,7 @@ export async function runInstall(
  * `lum today` prints would silently diverge, and nothing would catch it.
  */
 async function wire(home: string) {
-  const configText = await readFile(join(home, ".localusagemeter", "config.json"), "utf8").catch(
-    () => null,
-  );
+  const configText = await readFile(configPathFor(home), "utf8").catch(() => null);
   const { config } = parseConfigText(configText);
   const clock: ClockPort = {
     nowMs: () => Date.now(),
@@ -410,4 +412,22 @@ function attemptsFor(resolved: Awaited<ReturnType<typeof resolveSource>>): Docto
     return [];
   }
   return [{ where: probe.where, found: probe.available, detail: probe.where }];
+}
+
+/**
+ * Where the user's config lives, preferring the current directory and falling back to the old one.
+ *
+ * The fallback is READ-ONLY and deliberately not a migration. Copying the file would mean writing
+ * into a directory the user did not ask us to create, on a path we picked, during a command they
+ * ran for another reason — and if the copy half-succeeded they would then have two configs
+ * disagreeing with no way to tell which one was live. Reading the old location keeps exactly one
+ * source of truth until the user moves it themselves.
+ *
+ * `lum` users upgrading therefore keep their budget, thresholds and guard settings with no action.
+ */
+function configPathFor(home: string): string {
+  const current = join(home, STATE_DIR_NAME, "config.json");
+  if (existsSync(current)) return current;
+  const legacy = join(home, LEGACY_STATE_DIR_NAME, "config.json");
+  return existsSync(legacy) ? legacy : current;
 }

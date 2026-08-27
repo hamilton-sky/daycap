@@ -11,13 +11,13 @@ const GUARD = join(root, "src", "bin", "guard.js");
 let home: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "lum-guard-"));
-  mkdirSync(join(home, ".localusagemeter", "state"), { recursive: true });
+  mkdirSync(join(home, ".daycap", "state"), { recursive: true });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 function writeSnapshot(over: Record<string, unknown> = {}): void {
   writeFileSync(
-    join(home, ".localusagemeter", "state", "today.json"),
+    join(home, ".daycap", "state", "today.json"),
     JSON.stringify({
       schema: 1,
       usageDay: "2026-08-27",
@@ -38,7 +38,7 @@ function writeSnapshot(over: Record<string, unknown> = {}): void {
 
 function writeConfig(guard: Record<string, unknown> | undefined): void {
   writeFileSync(
-    join(home, ".localusagemeter", "config.json"),
+    join(home, ".daycap", "config.json"),
     JSON.stringify({ dailyBudgetUsd: 10, ...(guard === undefined ? {} : { guard }) }),
   );
 }
@@ -93,22 +93,22 @@ describe("guard — invariant 3: fail open on every fault", () => {
   it.each([
     [
       "a truncated snapshot",
-      () => writeFileSync(join(home, ".localusagemeter", "state", "today.json"), '{"schema":1,'),
+      () => writeFileSync(join(home, ".daycap", "state", "today.json"), '{"schema":1,'),
     ],
     [
       "a truncated config",
       () => {
         writeSnapshot();
-        writeFileSync(join(home, ".localusagemeter", "config.json"), "{not json");
+        writeFileSync(join(home, ".daycap", "config.json"), "{not json");
       },
     ],
     [
       "no state directory at all",
-      () => rmSync(join(home, ".localusagemeter"), { recursive: true, force: true }),
+      () => rmSync(join(home, ".daycap"), { recursive: true, force: true }),
     ],
     [
       "a snapshot that is an array",
-      () => writeFileSync(join(home, ".localusagemeter", "state", "today.json"), "[]"),
+      () => writeFileSync(join(home, ".daycap", "state", "today.json"), "[]"),
     ],
   ])("%s allows and exits 0", (_name, setup) => {
     writeConfig({ enabled: true, denyAt: 1, mode: "hard", allowTools: [] });
@@ -236,7 +236,7 @@ describe("guard — as a real Codex hook process", () => {
   it("fails open on a Codex payload it cannot parse, exactly as on Claude Code", () => {
     writeSnapshot();
     writeConfig({ enabled: true, denyAt: 1, mode: "hard", allowTools: [] });
-    writeFileSync(join(home, ".localusagemeter", "state", "today.json"), "{oops");
+    writeFileSync(join(home, ".daycap", "state", "today.json"), "{oops");
     const { out, code } = run(codexInput());
     expect(out).toBe("");
     expect(code).toBe(0);

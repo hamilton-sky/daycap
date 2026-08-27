@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: ["src/bin/lum.ts"],
+  entry: ["src/bin/daycap.ts"],
   format: ["esm"],
   target: "node22",
   platform: "node",

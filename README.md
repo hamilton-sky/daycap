@@ -1,4 +1,4 @@
-# `lum`
+# `daycap`
 
 A local **budget guardrail** for AI coding tools. It reads today's spend from a usage collector
 already on your machine, compares it against a daily allowance across every tool you use, warns you
@@ -6,24 +6,26 @@ before the allowance is gone — and can **block** tool calls once it is.
 
 No server, no proxy, no login, no daemon of its own. Nothing leaves the machine.
 
-> **Naming.** The CLI is `lum`. The repo is still `token-tracker` and the product name is not
-> settled — see [Open decisions](#open-decisions). Don't write marketing copy against either yet.
+> **Upgrading from `lum`?** Nothing to do. `lum` still works as an alias, your existing
+> `settings.json` hooks keep running, and `~/.localusagemeter/` is read as a fallback so your budget
+> and your threshold latch survive the rename. `daycap doctor` shows which config file it actually
+> used.
 
 ---
 
 ## Try it in 30 seconds
 
 ```bash
-pnpm install && pnpm verify      # typecheck, lint, build, 636 tests
+pnpm install && pnpm verify      # typecheck, lint, build, 644 tests
 npm i -g ccusage@20              # the collector, if you don't have it
-node dist/lum.js today           # a real number from your own transcripts
-node dist/lum.js doctor          # why the number is what it is
+node dist/daycap.js today           # a real number from your own transcripts
+node dist/daycap.js doctor          # why the number is what it is
 ```
 
 ## What you get
 
 ```
-lum — 2026-08-27
+daycap — 2026-08-27
 
   claude-code     $215.78
   codex             $1.37
@@ -41,7 +43,7 @@ today $3.20 / $10.00 (32%) ▓▓░░░          API-key account, under 80%
 today $6.40 / $10.00 (64%) ▓▓▓░░ ↑        ahead of pace for the time of day
 today $8.40 / $10.00 (84%) ▓▓▓▓░          crossed 80%   (amber + notification)
 today $11.90 / $10.00 (119%) ▓▓▓▓▓        over budget   (red + notification)
-lum — (no source)                          no collector installed
+daycap — (no source)                          no collector installed
 ```
 
 On a subscription the headline is **rate-limit percentage, not dollars** — imputed USD is money that
@@ -50,16 +52,16 @@ does not exist, and Claude Code hands the real constraint to the statusline on s
 ## Install
 
 ```bash
-lum install            # prints the Claude Code settings block, changes nothing
-lum install --write    # applies it, after backing up settings.json
-lum install --write --guard    # also installs the PreToolUse enforcement hook
-lum install --write --codex    # Codex instead (~/.codex/hooks.json) — hooks only
+daycap install            # prints the Claude Code settings block, changes nothing
+daycap install --write    # applies it, after backing up settings.json
+daycap install --write --guard    # also installs the PreToolUse enforcement hook
+daycap install --write --codex    # Codex instead (~/.codex/hooks.json) — hooks only
 ```
 
 `--write` never clobbers: it backs up `settings.json` first, and re-running is idempotent.
 
-Config lives at `~/.localusagemeter/config.json`. Every key is optional; a malformed file still
-renders, and `lum doctor` prints the reason rather than failing silently.
+Config lives at `~/.daycap/config.json`. Every key is optional; a malformed file still
+renders, and `daycap doctor` prints the reason rather than failing silently.
 
 ```json
 {
@@ -85,13 +87,13 @@ which is a deliberate act, where `ccusage` on `PATH` may be there because someth
 it. With no path set, `auto` is ccusage.
 
 **Naming a source turns the fallback off.** If you write `"source": "ccusage"` and ccusage cannot be
-reached, `lum` reports that and stops — it does not quietly read the other one. Silently falling back
+reached, `daycap` reports that and stops — it does not quietly read the other one. Silently falling back
 from the source you chose is how a tool reports the wrong numbers without telling you. `doctor` will
 say which other source *would* have worked, so a broken install and a wrong config key are
 distinguishable.
 
 **`jsonfile` is the escape hatch.** If your tool has no collector, produce this yourself — a cron
-job, a shell one-liner, an export from something nobody has adapted — and `lum` counts it:
+job, a shell one-liner, an export from something nobody has adapted — and `daycap` counts it:
 
 ```json
 {
@@ -117,7 +119,7 @@ job, a shell one-liner, an export from something nobody has adapted — and `lum
 - **Codex has no statusline and cannot.** `tui.status_line` takes a closed list of Codex's own
   built-in items — no command contract, no stdin JSON. That is schema-level, a ceiling not a gap.
 - **Cursor exposes no local spend data at all.** Its tracking DB has no token, cost or price column,
-  so no collector can price it from disk — ever. `lum doctor` names it as detected-but-unpriceable
+  so no collector can price it from disk — ever. `daycap doctor` names it as detected-but-unpriceable
   rather than silently omitting it, because a total that quietly excludes your heaviest tool is
   worse than one that says what it is missing.
 - **The two guard ticks are not the same tick.** Claude Code documents that a hook `deny` applies
@@ -140,7 +142,7 @@ would otherwise blow the budget, rather than a number you had already stopped re
 ## Design
 
 We never parse a log. A collector already on the machine does that, for more tools than we ever
-would, and `lum` owns the budget policy on top.
+would, and `daycap` owns the budget policy on top.
 
 ```
   Claude Code ─┐
@@ -148,12 +150,12 @@ would, and `lum` owns the budget policy on top.
   your own    ─┘     (or your own JSON file)                  │
                                                              ▼
                      ┌───────────────────────────────────────────────┐
-                     │  lum  —  budget policy only                   │
+                     │  daycap  —  budget policy only                   │
                      │  select source → evaluate → latch → notify    │
                      └───────────────────┬───────────────────────────┘
      Claude Code stdin ──────────────────┤  rate_limits, cost, context_window
                                          ▼
-        statusline row · lum today · OS notification · PreToolUse deny
+        statusline row · daycap today · OS notification · PreToolUse deny
 ```
 
 Node ≥ 20.11, TypeScript, ESM-only, **zero runtime dependencies**. `domain/` is pure — no fs, no clock,
@@ -183,15 +185,16 @@ and no credentials.
 
 ## Open decisions
 
-Two, both needing a human, both blocking release:
+One, and it needs a human:
 
 | # | Decision | State |
 |---|---|---|
-| **PRE-B** | **Has anyone asked for this?** | Open. Unclaimed and unwanted look identical from outside. |
-| **PRE-D** | **What is it called?** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established project doing the collection half. | Open. CLI `lum` is settled; repo and product name are not. |
+| **PRE-B** | **Has anyone asked for this?** | Open. Unclaimed and unwanted look identical from outside — and you cannot measure demand for a thing nobody can install yet. |
 
-Settled since: **MIT** (`LICENSE`), and Node's floor is `>=20.11`, verified by a `node20-compat`
-CI job rather than asserted.
+Settled: the name is **`daycap`** (repo, package and command; `lum` stays as a compatibility alias),
+the licence is **MIT**, and the Node floor is **`>=20.11`** — verified by a `node20-compat` CI job
+rather than asserted. See
+[`LICENSE_SCAN.md`](pathly/features/local-usage-meter/LICENSE_SCAN.md).
 
 ## Non-goals
 
@@ -211,7 +214,7 @@ reaches stdout, the snapshot, the latch, or a notification's argv.
 ## Development
 
 ```bash
-pnpm verify        # typecheck + lint + build + test  (636 passing, 12 skipped)
+pnpm verify        # typecheck + lint + build + test  (644 passing, 12 skipped)
 pnpm test:watch
 pnpm coverage
 ```

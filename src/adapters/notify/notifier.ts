@@ -14,6 +14,7 @@
  */
 
 import { execFile } from "node:child_process";
+import { CLI_NAME } from "../../domain/brand.ts";
 import type { Notification, NotifierPort } from "../../domain/ports.ts";
 
 export type NotifierOptions = {
@@ -73,7 +74,7 @@ function argvFor(
         ],
       };
     case "linux":
-      return { cmd: "notify-send", args: ["--app-name=lum", title, body] };
+      return { cmd: "notify-send", args: [`--app-name=${CLI_NAME}`, title, body] };
     case "win32":
       return {
         cmd: "powershell",

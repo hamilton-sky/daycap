@@ -12,10 +12,11 @@
  * named file full of zeroes — the one outcome atomic-rename is supposed to prevent.
  */
 
-import { constants } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { LEGACY_STATE_DIR_NAME, STATE_DIR_NAME } from "../../domain/brand.ts";
 
 /** The stored bytes are not the value we wrote. Distinct from "absent", which is `null`. */
 export class StoreCorruptError extends Error {
@@ -167,9 +168,19 @@ export class AtomicFileStore {
   }
 }
 
-/** `~/.localusagemeter/state`, the one directory `lum` persists into. */
+/**
+ * `~/.daycap/state`, the one directory `daycap` persists into — falling back to the pre-rename
+ * `~/.localusagemeter/state` when it exists and the new one does not.
+ *
+ * The fallback matters more here than for config: this directory holds the LATCH. Silently starting
+ * fresh would re-fire every threshold the user had already been warned about today, which is
+ * invariant 2 broken by a rename rather than by a bug in the latch.
+ */
 export function defaultStateDir(home: string): string {
-  return join(home, ".localusagemeter", "state");
+  const current = join(home, STATE_DIR_NAME, "state");
+  if (existsSync(current)) return current;
+  const legacy = join(home, LEGACY_STATE_DIR_NAME, "state");
+  return existsSync(legacy) ? legacy : current;
 }
 
 export { dirname };

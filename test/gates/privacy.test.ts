@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// BIN is derived from package.json, not written down here — see the module for why.
+import { BIN, BUILT } from "../support/bin-path.ts";
 
 /**
  * Gate 3 of 3 — the privacy canary (ADR-v2-004).
@@ -27,7 +29,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  */
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const BIN = join(root, "dist", "lum.js");
 const FAKE = join(root, "test", "stubs", "fake-ccusage-bin.mjs");
 const CANARIES: string[] = JSON.parse(
   readFileSync(join(root, "test", "fixtures", "collector", "CORPUS.json"), "utf8"),
@@ -39,13 +40,13 @@ let argvLog: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "lum-privacy-"));
   argvLog = join(home, "notify-argv.log");
-  mkdirSync(join(home, ".localusagemeter"), { recursive: true });
+  mkdirSync(join(home, ".daycap"), { recursive: true });
   const notify = join(home, "notify.sh");
   // Records the FULL argv, so a canary smuggled into any argument is caught.
   writeFileSync(notify, `#!/bin/sh\nprintf '%s\\n' "$@" >> "${argvLog}"\n`);
   chmodSync(notify, 0o755);
   writeFileSync(
-    join(home, ".localusagemeter", "config.json"),
+    join(home, ".daycap", "config.json"),
     JSON.stringify({
       dailyBudgetUsd: 10,
       thresholds: [0.8, 1],
@@ -55,8 +56,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-const built = existsSync(BIN);
-const maybe = built && process.platform !== "win32" ? describe : describe.skip;
+const maybe = BUILT && process.platform !== "win32" ? describe : describe.skip;
 
 maybe("gate: privacy canary — end to end", () => {
   it("has canaries to look for", () => {
@@ -70,7 +70,7 @@ maybe("gate: privacy canary — end to end", () => {
       timeout: 20_000,
     });
 
-    const stateDir = join(home, ".localusagemeter", "state");
+    const stateDir = join(home, ".daycap", "state");
     const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
     const surfaces: Array<[string, string]> = [
       ["rendered stdout", stdout],

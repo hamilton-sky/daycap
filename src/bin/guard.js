@@ -37,13 +37,27 @@
  *     run lets the tool call proceed. An empty reason there is not an ugly block — it is no block.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const STATE = (home) => join(home, ".localusagemeter", "state");
-const CONFIG = (home) => join(home, ".localusagemeter", "config.json");
+/**
+ * Literals duplicated from `src/domain/brand.ts` because the import gate limits this file to
+ * node:fs/os/path/url — see the same note in `statusline.js`. Kept in step by a gate assertion.
+ *
+ * `.daycap` preferred, the pre-rename name read as a fallback. Getting this wrong would not be a
+ * cosmetic bug: a guard that cannot find the snapshot fails OPEN, so a rename would silently stop
+ * enforcing for every existing user.
+ */
+const dir = (home) => {
+  const current = join(home, ".daycap");
+  if (existsSync(current)) return current;
+  const legacy = join(home, ".localusagemeter");
+  return existsSync(legacy) ? legacy : current;
+};
+const STATE = (home) => join(dir(home), "state");
+const CONFIG = (home) => join(dir(home), "config.json");
 
 /** Anything unreadable or unparseable is `null`. Never throws. */
 function readJson(path) {

@@ -1,10 +1,10 @@
 /**
- * `lum install` — writes the Claude Code settings block. P3-5 + P3-6.
+ * `daycap install` — writes the Claude Code settings block. P3-5 + P3-6.
  *
  * This is the shape of the answer to PRE-F, and it is deliberately not a daemon.
  *
  * The problem: a statusline command is a short-lived process that can only READ. If the snapshot
- * only refreshes when the user types `lum`, the meter goes stale silently — and a stale budget
+ * only refreshes when the user types `daycap`, the meter goes stale silently — and a stale budget
  * guardrail is worse than none, because it reports safety that is not there.
  *
  * The options the design considered were (A) the statusline self-spawns a refresh, (B) the user
@@ -18,6 +18,8 @@
  * times per turn, and a collector spawn per tool call is ccusage issue #455 — statusline spawns
  * accumulating until OOM — reproduced inside our own tool.
  */
+
+import { CLI_NAME } from "../domain/brand.ts";
 
 export type SettingsBlock = Record<string, unknown>;
 
@@ -185,7 +187,7 @@ export function planCodexInstall(
 }
 
 /**
- * What `lum install --codex` prints.
+ * What `daycap install --codex` prints.
  *
  * The trust paragraph is not boilerplate. Codex refuses to run a non-managed hook until the user
  * reviews it, and it pins that trust to the hook's HASH — so this file landing on disk installs
@@ -194,7 +196,7 @@ export function planCodexInstall(
  */
 export function renderCodexPlan(plan: InstallPlan, hooksPath: string): string[] {
   if (plan.changes.length === 0) {
-    return [`lum is already installed in ${hooksPath} — nothing to do.`];
+    return [`${CLI_NAME} is already installed in ${hooksPath} — nothing to do.`];
   }
   return [
     `Add this to ${hooksPath}:`,
@@ -209,15 +211,15 @@ export function renderCodexPlan(plan: InstallPlan, hooksPath: string): string[] 
     "reviewed, and it records that trust against the hook's hash — so editing this file later",
     "turns the hooks back off until you re-trust them. Until you do, nothing here runs.",
     "",
-    "Codex has no statusline a third party can write into, so `lum` installs no ambient display",
-    "there — the number is available via `lum today` and `lum doctor`.",
+    `Codex has no statusline a third party can write into, so \`${CLI_NAME}\` installs no ambient display`,
+    `there — the number is available via \`${CLI_NAME} today\` and \`${CLI_NAME} doctor\`.`,
   ];
 }
 
-/** What `lum install` prints when you do not pass `--write`. */
+/** What `daycap install` prints when you do not pass `--write`. */
 export function renderPlan(plan: InstallPlan, settingsPath: string): string[] {
   if (plan.changes.length === 0) {
-    return [`lum is already installed in ${settingsPath} — nothing to do.`];
+    return [`${CLI_NAME} is already installed in ${settingsPath} — nothing to do.`];
   }
   return [
     `Add this to ${settingsPath}:`,
@@ -229,7 +231,7 @@ export function renderPlan(plan: InstallPlan, settingsPath: string): string[] {
     "Re-run with --write to apply it (a .bak backup is written first).",
     "",
     "The Stop hook is what keeps the statusline from going stale. Without it the meter only",
-    "refreshes when you run `lum` by hand, and a budget guardrail that is quietly out of date",
+    `refreshes when you run \`${CLI_NAME}\` by hand, and a budget guardrail that is quietly out of date`,
     "is worse than none.",
     "",
     "`lum install --guard` additionally installs a PreToolUse hook that DENIES tool calls once",

@@ -1,5 +1,5 @@
 {
-  "name": "local-usage-meter",
+  "name": "daycap",
   "version": "0.0.0",
   "private": true,
   "description": "Local budget guardrail for AI coding tools. Consumes a usage collector; owns the budget policy.",
@@ -10,9 +10,10 @@
   },
   "packageManager": "pnpm@11.23.0",
   "bin": {
-    "lum": "./dist/lum.js",
-    "lum-statusline": "./src/bin/statusline.js",
-    "lum-guard": "./src/bin/guard.js"
+    "daycap": "./dist/daycap.js",
+    "daycap-statusline": "./src/bin/statusline.js",
+    "daycap-guard": "./src/bin/guard.js",
+    "lum": "./dist/daycap.js"
   },
   "files": [
     "dist",
