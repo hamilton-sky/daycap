@@ -190,10 +190,8 @@ Two, both needing a human, both blocking release:
 | **PRE-B** | **Has anyone asked for this?** | Open. Unclaimed and unwanted look identical from outside. |
 | **PRE-D** | **What is it called?** [Token Tracker](https://github.com/xiufengsun/TokenTracker) is an established project doing the collection half. | Open. CLI `lum` is settled; repo and product name are not. |
 
-Also unresolved and cheap: `package.json` says `"license": "UNLICENSED"` with no `LICENSE` file,
-which is a positive statement that nobody may use this. See
-[`LICENSE_SCAN.md`](pathly/features/local-usage-meter/LICENSE_SCAN.md) — the published artifact
-carries **no third-party code at all**, so the choice is unconstrained.
+Settled since: **MIT** (`LICENSE`), and Node's floor is `>=20.11`, verified by a `node20-compat`
+CI job rather than asserted.
 
 ## Non-goals
 
@@ -225,4 +223,6 @@ wrong.
 
 ## License
 
-Not yet chosen — see [Open decisions](#open-decisions).
+[MIT](LICENSE). Unconstrained by anything we ship — see
+[`LICENSE_SCAN.md`](pathly/features/local-usage-meter/LICENSE_SCAN.md): the published artifact
+carries no third-party code at all.

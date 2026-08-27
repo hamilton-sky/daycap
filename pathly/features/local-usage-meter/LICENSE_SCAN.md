@@ -70,7 +70,7 @@ a reader who sees us recommend an install will reasonably want to know what it i
 
 Both are the owner's call, both block release, and neither is a code change.
 
-### `license` is `UNLICENSED`, and there is no `LICENSE` file
+### ~~`license` is `UNLICENSED`, and there is no `LICENSE` file~~ — RESOLVED 2026-08-27: MIT
 
 ```json
 "license": "UNLICENSED"
@@ -85,10 +85,11 @@ Recommendation, not a decision: **MIT**. It matches all 146 dev packages, it mat
 it is what the ecosystem this tool lives in expects, and it imposes nothing on us. Apache-2.0 is
 the reasonable alternative if patent language is wanted.
 
-Whatever is chosen needs the `license` field changed *and* a `LICENSE` file added — the field alone
-is not the grant.
+**Resolved: MIT.** Both halves done — the `license` field and a `LICENSE` file, because the field
+alone is not the grant. `npm pack --dry-run` confirms `LICENSE` is in the tarball (npm includes it
+regardless of `files`, but "npm probably does that" is not the same as having looked).
 
-### `engines` requires Node 22, and nothing in the code seems to need it
+### ~~`engines` requires Node 22~~ — RESOLVED 2026-08-27: `>=20.11`, with a CI job behind it
 
 ```json
 "engines": { "node": ">=22" }
@@ -101,10 +102,22 @@ without a reason attached to it.
 It is not free: Node 20 is still in maintenance LTS and a `>=22` floor makes `npm i -g` fail outright
 for those users, which is a strange first impression for a tool selling zero setup.
 
-Deliberately **not changed here.** Lowering an engines floor is a compatibility claim, and this scan
-has no evidence for it — nothing 22-only being *visible* is not the same as the suite passing on
-Node 20. The honest next step is to add a Node 20 leg to the CI matrix and let it answer; if it is
-green, lower the floor, and if it is red, the floor gets a comment saying which test needs 22.
+**Resolved by getting the evidence rather than arguing.** A `node20-compat` CI job now installs
+under 22 and runs typecheck plus tests under 20; the floor is `>=20.11`.
+
+Two things that job found, both worth knowing:
+
+- **pnpm cannot run on Node 20 at all.** `pnpm@11.23.0` imports `node:sqlite`, absent before Node 22,
+  so the first attempt — a `node: [20, 22]` matrix dimension — died inside `pnpm/action-setup` before
+  reaching any of our code. The question was never asked, let alone answered. Hence install-under-22,
+  run-under-20. The constraint is the toolchain's, not the product's: nobody installing `lum` uses
+  pnpm.
+- **626 of 648 tests passed on Node 20**, and the one failure was the test HARNESS: the SIGKILL
+  atomicity case spawns a child importing `atomic.ts` under `--experimental-strip-types`, a Node 22.6
+  flag. It now skips below 22 with that reason in the code. Raising the floor for every consumer to
+  accommodate one test's harness would have been the tail wagging the dog.
+
+A third, unrelated thing it exposed is recorded in §6.
 
 ---
 
@@ -124,3 +137,21 @@ pnpm list --prod --depth Infinity
 # 4. The spawned collector
 npm view ccusage@20 license --json
 ```
+
+---
+
+## 6. A side-effect worth recording: `layer C` is contention-sensitive
+
+Not a license finding. It belongs here because this scan's own follow-up work is what surfaced it.
+
+Doubling the CI matrix to test Node 20 took the job count from three to six, and
+`layer C — absolute wall clock is < 150ms p95` failed on the Windows runner at **188.5 ms** — on a
+commit that touched only CI config and a version string. It had passed on the two PRs immediately
+before. Reverting to three jobs made it pass again.
+
+So layer C is partly measuring how busy the runner is. That is the same defect `a7dee06` fixed for
+layer B, arriving from the other direction — and this time it was my own change to the harness that
+perturbed what the harness measures.
+
+Deliberately **not** patched. The 150 ms is a claim about the latency a user's prompt waits for, not
+a threshold to raise until the build is green. Options are written up for a decision.
