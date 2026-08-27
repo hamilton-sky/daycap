@@ -8,3 +8,8 @@ spike/
 dist/
 coverage/
 .vitest/
+
+# Auto-generated tool output. CODE_INTEL.md was swept into a commit by a careless `git add -A`
+# during the daycap rename; it is a 5-line stub that says "project not yet indexed" and names the
+# pre-rename repo. Ignored so the next `-A` cannot do it again.
+CODE_INTEL.md
