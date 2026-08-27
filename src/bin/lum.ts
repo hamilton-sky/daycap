@@ -24,6 +24,7 @@ import { isLatchState, LATCH_KEY, type LatchState } from "../app/latch.ts";
 import { buildSnapshot, SNAPSHOT_KEY, snapshotAgeSeconds } from "../app/meter.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
+import { markerDirFor, UNPRICEABLE_TOOLS } from "../domain/surfaces.ts";
 import type { UsageSnapshot } from "../domain/types.ts";
 
 const VERSION = "0.0.0";
@@ -165,6 +166,14 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
           ),
         };
 
+  // P5-3. Existence only — we never look INSIDE a marker directory, which is the whole reason this
+  // is allowed to exist at all (`domain/surfaces.ts` has the argument). Detection lives here
+  // because `renderDoctor` is pure and this is the composition root; it is also cheap enough to sit
+  // in a diagnostic that deliberately does no I/O of its own beyond reading what is already cached.
+  const unpriceableFound = UNPRICEABLE_TOOLS.filter((tool) =>
+    existsSync(join(home, markerDirFor(tool))),
+  );
+
   const { lines, exitCode } = renderDoctor({
     home,
     sourceId: collector.id,
@@ -177,6 +186,7 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
     configPath: configText === null ? `${configPath} (absent, using defaults)` : configPath,
     configWarnings: warnings,
     echoSeen: echoSeen !== null && Number.isFinite(echoSeen.ageSeconds) ? echoSeen : null,
+    unpriceableFound,
   });
   process.stdout.write(`${lines.join("\n")}\n`);
   return exitCode;

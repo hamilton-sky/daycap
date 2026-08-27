@@ -7,6 +7,7 @@ import {
   WIDTH,
 } from "../../src/adapters/render/doctor.ts";
 import { DEFAULT_CONFIG } from "../../src/domain/config.ts";
+import { UNPRICEABLE_TOOLS } from "../../src/domain/surfaces.ts";
 import type { UsageSnapshot } from "../../src/domain/types.ts";
 
 const HOME = "/Users/alice";
@@ -39,6 +40,7 @@ const facts = (over: Partial<DoctorFacts> = {}): DoctorFacts => ({
   configPath: `${HOME}/.localusagemeter/config.json`,
   configWarnings: [],
   echoSeen: null,
+  unpriceableFound: [],
   ...over,
 });
 
@@ -229,5 +231,52 @@ describe("lum doctor — surfaces, so a missing one reads as a ceiling and not a
   it("says so even when nothing else is usable — it is a fact about lum, not about this machine", () => {
     const text = out(facts({ available: false, snapshot: null, snapshotAgeSeconds: null }));
     expect(text).toMatch(/statusline: Claude Code only/);
+  });
+});
+
+/**
+ * P5-3. The acceptance criteria, and the one invariant they are an instance of.
+ *
+ * Invariant 1 says unknown must never render as `$0.00`. A tool left out of the report entirely is
+ * the same falsehood told by omission: the Cursor user's total is missing their heaviest tool and
+ * the screen gives them no way to tell that from a quiet day.
+ */
+describe("lum doctor — tools that cannot be priced (P5-3)", () => {
+  it("names Cursor when it is installed, and says why it is not counted", () => {
+    const text = out(facts({ unpriceableFound: ["cursor"] }));
+    expect(text).toContain("cursor");
+    expect(text).toMatch(/no local spend data/);
+  });
+
+  it("says nothing at all when it is absent", () => {
+    // Not "prints an empty row" — the row must not exist. A permanent line about a tool the user
+    // does not run is noise, and noise is what stops the rest of this screen being read.
+    const text = out(facts({ unpriceableFound: [] }));
+    expect(text).not.toContain("cursor");
+    expect(text).not.toContain("unpriced");
+  });
+
+  it("fits the row without being clipped, for the case that actually ships", () => {
+    // The 80-column test below CANNOT catch an over-long sentence: `clip` truncates it to fit, so
+    // the assertion passes while the user reads "...so it cannot be…". That is exactly what the
+    // first draft of this line did. A single tool is the shipping case, and it must fit whole.
+    const line = renderDoctor(facts({ unpriceableFound: ["cursor"] })).lines.find((l) =>
+      l.includes("unpriced"),
+    ) as string;
+    expect(line.endsWith("…")).toBe(false);
+    expect(line).toContain("no local spend data");
+  });
+
+  it("stays inside 80 columns with every unpriceable tool present at once", () => {
+    // Guards the future shape of the list, not today's single entry: this line is assembled by
+    // joining names, so it is the one row here that grows without anyone editing the renderer.
+    const long = facts({ unpriceableFound: [...UNPRICEABLE_TOOLS, "some-other-editor"] });
+    for (const line of renderDoctor(long).lines) expect(line.length).toBeLessThanOrEqual(WIDTH);
+  });
+
+  it("is a warning, not a failure — there is nothing for the user to fix", () => {
+    // Exit 1 is reserved for "nothing is usable". An unpriceable tool is a permanent property of
+    // that tool, so exiting non-zero would make `lum doctor` fail forever on a working install.
+    expect(renderDoctor(facts({ unpriceableFound: ["cursor"] })).exitCode).toBe(0);
   });
 });

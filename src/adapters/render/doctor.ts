@@ -28,6 +28,12 @@ export type DoctorFacts = {
   configWarnings: readonly string[];
   /** Present only when the statusline has recorded a rate-limit reading. */
   echoSeen: { fiveHourPct?: number; sevenDayPct?: number; ageSeconds: number } | null;
+  /**
+   * Tools found installed that can never be priced from disk (P5-3, `domain/surfaces.ts`).
+   *
+   * Detected, not configured — so an empty array means "none present", never "not checked".
+   */
+  unpriceableFound: readonly string[];
 };
 
 const OK = "✓";
@@ -167,6 +173,24 @@ export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: n
   // list of its own built-in items (P5-1, verified against the docs and the source) — so this is a
   // ceiling, not a gap. Saying so costs one line; leaving it out costs someone an afternoon.
   lines.push(row("surfaces", OK, "guard: Claude Code, Codex · statusline: Claude Code only"));
+
+  // P5-3. Only printed when the tool is actually here. A permanent line listing tools the user does
+  // not run is noise, and noise is what makes the rest of this screen stop being read — whereas a
+  // Cursor user is looking at a total that silently omits their heaviest tool. WARN, not BAD:
+  // nothing is broken and there is nothing to fix, which is exactly the point being made.
+  if (facts.unpriceableFound.length > 0) {
+    lines.push(
+      row(
+        "unpriced",
+        WARN,
+        // "anywhere on disk" is doing real work: it says this is a ceiling, not a missing feature,
+        // so nobody goes looking for the config flag that would switch it on. The wording is also
+        // length-tuned to the 65 columns this row has — a longer sentence gets silently clipped
+        // mid-word by `clip`, which the 80-column test cannot see. See doctor.test.ts.
+        `${facts.unpriceableFound.join(", ")} installed — exposes no local spend data anywhere on disk`,
+      ),
+    );
+  }
 
   // --- signal -----------------------------------------------------------------------------------
   const echo = facts.echoSeen;
