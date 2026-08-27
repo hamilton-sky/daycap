@@ -128,20 +128,76 @@ describe("guard — invariant 3: fail open on every fault", () => {
   });
 });
 
+/**
+ * The guard's latency, measured against THIS MACHINE rather than against a constant.
+ *
+ * The claim is a safety property, not a performance nicety: a timed-out hook does NOT block, so a
+ * slow guard is an absent guard, and this is the difference between enforcement and the illusion of
+ * it.
+ *
+ * WHY IT IS NO LONGER A FLAT 1000ms. It was, and it failed at 3626ms on a developer machine at load
+ * average 41 — then passed at 587ms on the very next run with nothing changed. Same defect the
+ * statusline's layer C had and for the same reason: `guard.js` is a Node script, so most of its wall
+ * clock is the interpreter starting, and on a loaded machine that term swamps everything we control.
+ * An assertion that reports how busy the runner is cannot also report whether the guard is fast.
+ *
+ * So the budget is the machine's own bare-node boot plus headroom, measured in the same loop and
+ * interleaved so shared noise cancels within each pair. On an idle machine that is a ~150ms ceiling;
+ * under contention it scales with the platform instead of failing it.
+ *
+ * The ABSOLUTE claim still matters and is still asserted — against the real hook timeout rather than
+ * a proxy for it. Claude Code allows 5s; anything past half of that is not "far inside" by any
+ * reading, and unlike 1000ms it is a number taken from the contract we are relying on.
+ */
+/** A bare interpreter start, for calibrating the guard's cost against this machine. */
+function timeBareNode(): number {
+  const t = performance.now();
+  execFileSync(process.execPath, ["-e", ""], { stdio: ["pipe", "pipe", "ignore"], input: "" });
+  return performance.now() - t;
+}
+
 describe("guard — it must never become the slow path", () => {
   it("completes far inside the fail-open timeout", () => {
     writeSnapshot();
     writeConfig({ enabled: true, denyAt: 1, mode: "deny", allowTools: [] });
-    const samples: number[] = [];
+
+    const bare: number[] = [];
+    const guard: number[] = [];
     for (let i = 0; i < 20; i++) {
+      // Interleaved, and alternating which goes first so no ordering bias accumulates.
+      if (i % 2 === 0) {
+        const b = timeBareNode();
+        bare.push(b);
+        guard.push(timeGuard());
+      } else {
+        guard.push(timeGuard());
+        bare.push(timeBareNode());
+      }
+    }
+    const q95 = (xs: number[]): number =>
+      [...xs].sort((a, b) => a - b)[Math.floor(xs.length * 0.95)] ?? 0;
+
+    const bareP95 = q95(bare);
+    const guardP95 = q95(guard);
+    const ceiling = bareP95 + 120;
+
+    expect(
+      guardP95,
+      `guard p95 ${guardP95.toFixed(1)}ms vs ceiling ${ceiling.toFixed(1)}ms ` +
+        `(this machine's bare node boot p95 ${bareP95.toFixed(1)}ms + 120ms headroom)`,
+    ).toBeLessThan(ceiling);
+
+    // Half of Claude Code's documented 5s hook timeout. Past this it is not "far inside" on any
+    // machine, however busy — and this number comes from the contract rather than from taste.
+    expect(guardP95, `guard p95 ${guardP95.toFixed(1)}ms against the 5s hook timeout`).toBeLessThan(
+      2500,
+    );
+
+    function timeGuard(): number {
       const t = performance.now();
       run();
-      samples.push(performance.now() - t);
+      return performance.now() - t;
     }
-    const p95 = [...samples].sort((a, b) => a - b)[Math.floor(samples.length * 0.95)] ?? 0;
-    // A timed-out hook does NOT block — the docs are explicit. So a slow guard is an absent guard,
-    // and this assertion is the difference between enforcement and the illusion of it.
-    expect(p95).toBeLessThan(1000);
   });
 });
 
