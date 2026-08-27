@@ -3,8 +3,26 @@
  *
  * P5-3. Everything else in the domain describes spend we can put a number on. This file describes
  * the opposite: a tool that is certainly running on this machine and certainly costing money, and
- * that we can nonetheless never price. Cursor keeps no token, cost, or price column anywhere on
- * disk — the absence is schema-level, not empty-on-this-machine, so no future adapter fixes it.
+ * that we nonetheless do not price.
+ *
+ * CORRECTED 2026-08-27, because the original wording here was wrong in a way worth preserving as a
+ * warning. It said Cursor "keeps no token, cost, or price column anywhere on disk" and that "no
+ * future adapter fixes it" — a permanent-impossibility claim, made about someone else's product,
+ * from one snapshot of its schema. A recheck found Cursor's CLI had begun emitting per-turn token
+ * counts locally (changelog, February 2026), and that Cursor's Admin API returns real spend against
+ * a user-supplied key. The claim had an expiry date and did not carry one.
+ *
+ * The accurate reason is OURS, and it is durable in a way a claim about their schema never was:
+ *
+ *   - Their local token counts live in CLI transcripts. Reading those is transcript parsing, which
+ *     ADR-v2-001 forbids and the import gate enforces.
+ *   - Turning tokens into dollars is re-pricing, which contract case C9b exists to make observable
+ *     and impossible.
+ *   - The Admin API is a network call, which shipped code never makes.
+ *
+ * So this list means "we will not derive a number for it", not "no number can exist". A user who
+ * wants Cursor counted has a supported route: emit their own JSON and point `sourceFile` at it. That
+ * is what P1-5's escape hatch is for, and it is the honest answer to give them.
  *
  * That is worth a line of output because the failure is SILENT. A Cursor user sees a total that
  * omits their heaviest tool and has no way to tell an under-count from a quiet day. Invariant 1

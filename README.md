@@ -112,19 +112,49 @@ job, a shell one-liner, an export from something nobody has adapted — and `day
 
 | | Claude Code | Codex | Cursor |
 |---|---|---|---|
-| `today` / `doctor` / notifications | ✅ | ✅ | ❌ named, never priced |
+| `today` / `doctor` / notifications | ✅ | ✅ | ⚠️ named, not priced — see below |
 | statusline | ✅ | ❌ not possible | ❌ |
 | guard (blocking) | ✅ | ✅ *weaker guarantee* | ❌ |
 
 - **Codex has no statusline and cannot.** `tui.status_line` takes a closed list of Codex's own
-  built-in items — no command contract, no stdin JSON. That is schema-level, a ceiling not a gap.
-- **Cursor exposes no local spend data at all.** Its tracking DB has no token, cost or price column,
-  so no collector can price it from disk — ever. `daycap doctor` names it as detected-but-unpriceable
-  rather than silently omitting it, because a total that quietly excludes your heaviest tool is
-  worse than one that says what it is missing.
+  built-in item identifiers — no command contract, no stdin JSON. Rechecked 2026-08-27 and still
+  true: two feature requests asking for a command-backed status line are open and unshipped, and the
+  community project that gives Codex a similar footer does it by configuring Codex's *native* fields,
+  because there is nothing else to configure.
+- **Cursor is detected but not priced, and the reason is our rules rather than Cursor's.** This
+  entry was rechecked on 2026-08-27 and the earlier wording — "no local spend data at all, can never
+  be priced" — was **too strong**. Two routes exist now:
+
+  1. Cursor's CLI emits **token counts** locally. Its changelog (February 2026) records "per-turn
+     input/output/cache token totals" and headless transcripts written as JSONL. Tokens, not cost.
+  2. Cursor's **Admin API** returns real spend, with a user-supplied Team key.
+
+  `daycap` uses neither, and both refusals are the same rules it applies to every other tool.
+  Route 1 is transcript parsing (ADR-v2-001) and turning those tokens into dollars is re-pricing,
+  which contract case `C9b` exists to make impossible. Route 2 is a network call, which shipped code
+  never makes. Neither is a Cursor limitation; both are ours, on purpose.
+
+  So the honest claim is **"not priced from disk, and we will not derive it"** — not "impossible".
+  If you want Cursor counted, `jsonfile` is the supported route: emit your own JSON and point
+  `sourceFile` at it. That is precisely what the escape hatch is for.
+
+  `daycap doctor` still names Cursor when it is present, because a total that quietly excludes your
+  heaviest tool is worse than one that says what it is missing.
+
+  *Not verified first-hand: Cursor is not installed on the machine this was checked from, and
+  Cursor's own `--output-format` reference does not list the token fields its changelog announces.
+  Treat the shape of that output as unconfirmed.*
 - **The two guard ticks are not the same tick.** Claude Code documents that a hook `deny` applies
-  even under `--dangerously-skip-permissions`. OpenAI explicitly declines to make that promise,
-  calling hooks "a useful guardrail, not a complete enforcement boundary". Don't flatten them.
+  even under `--dangerously-skip-permissions` — hooks are step 1 of the permission flow, bypass is
+  applied at step 4. OpenAI declines to make that promise, and still does: its hooks documentation
+  says in as many words, *"Treat tool hooks as a useful guardrail, not a complete enforcement
+  boundary."* It also notes hooks do not intercept every path — hosted tools bypass the local hook,
+  and `unified_exec` interception is incomplete. Don't flatten these into one claim.
+
+  Codex also gates hooks behind a trust step, and pins that trust to the file's hash: *"Codex records
+  trust against the hook's current hash, so new or changed hooks are marked for review and skipped
+  until trusted."* Its default hook timeout is **600s**, against Claude Code's 60 — which inverts our
+  "a slow guard is an absent guard" reasoning and is handled in `guard.js`.
 
 ## The guard
 

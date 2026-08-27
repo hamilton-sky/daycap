@@ -300,3 +300,83 @@ Doc URLs used:
 - `https://developers.openai.com/codex/hooks.md`
 - `https://developers.openai.com/codex/config-reference.md`
 - `https://learn.chatgpt.com/docs/codex-manual.md`
+
+---
+
+# ADDENDUM — recheck 2026-08-27 (later same day)
+
+The four surface claims were independently rechecked against primary sources, because they are
+printed in a public README as permanent limitations. Three held. One did not, and it is the one this
+document stated most strongly.
+
+## Held: Codex has no third-party statusline
+
+`tui.status_line` takes an ordered array of Codex's own predefined item identifiers — roughly two
+dozen of them, defaulting to `["model-with-reasoning", "context-remaining", "current-dir"]`, and `[]`
+to hide the footer. No command contract, no stdin JSON.
+
+Corroborated three ways: OpenAI's sample config; two open, unshipped feature requests asking for
+exactly a command-backed status line (`openai/codex` #17827 and #20244); and a community project
+that gives Codex a Claude-Code-style footer and says outright that it does so by configuring Codex's
+*native* TUI fields, "because Codex does not currently use the same external statusline command
+model as Claude Code".
+
+## Held, and now quotable: the guard asymmetry, the trust gate, the 600s timeout
+
+OpenAI's hooks documentation, verbatim: **"Treat tool hooks as a useful guardrail, not a complete
+enforcement boundary."** It further records that hooks do not intercept every path — hosted tools
+bypass the local hook, and `unified_exec` interception is incomplete. So the README must keep the two
+guard ticks distinct.
+
+Trust gate, verbatim: **"Codex records trust against the hook's current hash, so new or changed hooks
+are marked for review and skipped until trusted."**
+
+Timeout, verbatim: **"If `timeout` is omitted, Codex uses `600` seconds for most hooks. `SessionEnd`
+uses `1` second by default and supports up to `3` seconds."**
+
+Two figures in the comparison were NOT re-fetched this pass and rest on our earlier P5-4/P5-2 work:
+Claude Code's 60s default hook timeout, and the bypass-survival ordering. Both were primary-sourced
+at the time (the Agent SDK permissions page publishes the evaluation order). Re-verify before
+quoting either as fresh.
+
+## DID NOT HOLD: "Cursor exposes no local spend data at all"
+
+This document and `src/domain/surfaces.ts` both said Cursor keeps no token, cost or price column
+anywhere on disk, that the absence was schema-level, and that **no future adapter could fix it**.
+
+That was too strong, and it was the wrong *kind* of claim. Two routes now exist:
+
+1. **Cursor's CLI emits token counts locally.** Its changelog, February 2026: "Per-turn
+   input/output/cache token totals and a `request_id` in `stream-json` output; headless transcripts
+   write Claude Code-compatible JSONL." Confirmed live on Cursor's forum by one of their engineers.
+   Tokens, not priced cost — but tokens plus a price table is a cost.
+2. **Cursor's Admin API returns real spend.** `/teams/spend` and `/teams/filtered-usage-events`
+   return model usage, token consumption and costs against a Team API key with `usage:*` scope.
+   Remote, and Team/Business accounts only.
+
+### The lesson, which is worth more than the correction
+
+We asserted a permanent impossibility about someone else's product, from one snapshot of its schema,
+and put the word "ever" in a public README. It had an expiry date and carried no reminder to check.
+
+The durable reason is OURS, and it does not expire:
+
+- Their local token counts live in CLI transcripts. Reading those is transcript parsing — ADR-v2-001,
+  enforced by the import gate.
+- Turning tokens into dollars is re-pricing — contract case `C9b` exists to make that observable and
+  impossible.
+- The Admin API is a network call, which shipped code never makes.
+
+So the claim is **"not priced from disk, and we will not derive it"**, and a Cursor user who wants a
+number has a supported route: `jsonfile`, from P1-5. Rule-based reasons stay true; predictions about
+another vendor's schema do not.
+
+### Not verified, and flagged rather than smoothed over
+
+- Cursor is not installed on the machine this recheck ran from, so none of route 1 was reproduced
+  first-hand.
+- Cursor's own `--output-format` reference page does **not** list the token fields its changelog
+  announces — a discrepancy in their docs. The shape of that output is unconfirmed.
+- The current schema of Cursor's local `state.vscdb` was not re-inspected. The original "no column
+  anywhere" claim about the IDE database is therefore neither confirmed nor refuted; it is simply no
+  longer what the argument rests on.

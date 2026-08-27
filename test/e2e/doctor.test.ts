@@ -53,7 +53,7 @@ const facts = (over: Partial<DoctorFacts> = {}): DoctorFacts => ({
 
 const out = (f: DoctorFacts) => renderDoctor(f).lines.join("\n");
 
-describe("lum doctor — shape", () => {
+describe("daycap doctor — shape", () => {
   it("never exceeds 80 columns", () => {
     const long = facts({
       attempts: [{ where: "x".repeat(200), found: false }],
@@ -93,7 +93,7 @@ describe("lum doctor — shape", () => {
   });
 });
 
-describe("lum doctor — privacy", () => {
+describe("daycap doctor — privacy", () => {
   it("abbreviates the home directory to ~, so a username is not pasted into an issue", () => {
     const text = out(facts());
     expect(text).toContain("~/.daycap/config.json");
@@ -117,7 +117,7 @@ describe("lum doctor — privacy", () => {
   });
 });
 
-describe("lum doctor — says WHERE it looked", () => {
+describe("daycap doctor — says WHERE it looked", () => {
   it("lists every rung of the ladder when nothing resolved", () => {
     const text = out(
       facts({
@@ -138,7 +138,7 @@ describe("lum doctor — says WHERE it looked", () => {
   });
 });
 
-describe("lum doctor — exit code", () => {
+describe("daycap doctor — exit code", () => {
   it("exits 0 when healthy", () => {
     expect(renderDoctor(facts()).exitCode).toBe(0);
   });
@@ -158,7 +158,7 @@ describe("lum doctor — exit code", () => {
   });
 });
 
-describe("lum doctor — the things only doctor can tell you", () => {
+describe("daycap doctor — the things only doctor can tell you", () => {
   it("says the latch was recovered, which is why no alert fired today", () => {
     const text = out(facts({ latch: { present: true, recovered: true, firedToday: [] } }));
     expect(text).toContain("recovered");
@@ -209,7 +209,7 @@ describe("lum doctor — the things only doctor can tell you", () => {
   });
 });
 
-describe("lum doctor — unknown is never a numeral", () => {
+describe("daycap doctor — unknown is never a numeral", () => {
   it("says spend is unknown rather than printing a zero", () => {
     const text = out(facts({ snapshot: snapshot({ totalUsd: null }) }));
     expect(text).toContain("unknown");
@@ -226,7 +226,7 @@ describe("lum doctor — unknown is never a numeral", () => {
  * surfaces can exist at all — otherwise "there is no meter in my Codex footer" reads as a bug in
  * lum rather than as Codex having no statusline a third party can write into.
  */
-describe("lum doctor — surfaces, so a missing one reads as a ceiling and not a fault", () => {
+describe("daycap doctor — surfaces, so a missing one reads as a ceiling and not a fault", () => {
   it("names the guard's hosts and the statusline's single host", () => {
     const text = out(facts());
     expect(text).toContain("surfaces");
@@ -248,11 +248,11 @@ describe("lum doctor — surfaces, so a missing one reads as a ceiling and not a
  * the same falsehood told by omission: the Cursor user's total is missing their heaviest tool and
  * the screen gives them no way to tell that from a quiet day.
  */
-describe("lum doctor — tools that cannot be priced (P5-3)", () => {
+describe("daycap doctor — tools we do not price (P5-3)", () => {
   it("names Cursor when it is installed, and says why it is not counted", () => {
     const text = out(facts({ unpriceableFound: ["cursor"] }));
     expect(text).toContain("cursor");
-    expect(text).toMatch(/no local spend data/);
+    expect(text).toMatch(/no priced local data/);
   });
 
   it("says nothing at all when it is absent", () => {
@@ -271,7 +271,7 @@ describe("lum doctor — tools that cannot be priced (P5-3)", () => {
       l.includes("unpriced"),
     ) as string;
     expect(line.endsWith("…")).toBe(false);
-    expect(line).toContain("no local spend data");
+    expect(line).toContain("no priced local data");
   });
 
   it("stays inside 80 columns with every unpriceable tool present at once", () => {
@@ -292,7 +292,7 @@ describe("lum doctor — tools that cannot be priced (P5-3)", () => {
  * P4-3. The other half of the AC: the choice must be EXPLAINED, not merely deterministic. A
  * deterministic choice nobody can see is indistinguishable from a coin flip landing the same way.
  */
-describe("lum doctor — which source, and why (P4-3)", () => {
+describe("daycap doctor — which source, and why (P4-3)", () => {
   const twoCandidates = (over: Partial<DoctorFacts> = {}) =>
     facts({
       probes: [
@@ -407,7 +407,7 @@ describe("lum doctor — which source, and why (P4-3)", () => {
  * ladder marking an AVAILABLE ccusage as `✗ not found`, two lines above the selection block marking
  * the same probe `✓`. One screen, two answers.
  */
-describe("lum doctor — the screen never disagrees with itself (P4-3)", () => {
+describe("daycap doctor — the screen never disagrees with itself (P4-3)", () => {
   const nothingSelected = facts({
     available: false,
     attempts: [],
