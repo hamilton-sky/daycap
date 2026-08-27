@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { hookEntry, planInstall, renderPlan, statusLineBlock } from "../../src/app/install.ts";
+import {
+  hookEntry,
+  planCodexInstall,
+  planInstall,
+  renderCodexPlan,
+  renderPlan,
+  statusLineBlock,
+} from "../../src/app/install.ts";
 
 const SL = "/opt/lum/statusline.js";
 const plan = (existing: unknown) => planInstall(existing, "lum", SL);
@@ -95,5 +102,84 @@ describe("renderPlan", () => {
   it("says there is nothing to do when already installed", () => {
     const done = plan(plan(null).merged);
     expect(renderPlan(done, "/x/settings.json").join("\n")).toContain("already installed");
+  });
+});
+
+/**
+ * P5-2 — `lum install --codex`. Writes `~/.codex/hooks.json`.
+ *
+ * The shape is near-identical to the Claude Code block, which is the finding, not a shortcut: one
+ * `guard.js` serves both hosts. What these assert is the handful of things that are NOT the same.
+ */
+describe("planCodexInstall", () => {
+  const GUARD = "/opt/lum/guard.js";
+  const codex = (existing: unknown, o = {}) => planCodexInstall(existing, "lum", o);
+
+  it("installs the refresh hooks and no statusLine — Codex has no statusline to write into", () => {
+    const { merged, changes } = codex(null);
+    expect(merged.statusLine).toBeUndefined();
+    expect(commandsFor(merged as Record<string, unknown>, "Stop")).toEqual(["lum refresh"]);
+    expect(commandsFor(merged as Record<string, unknown>, "SessionStart")).toEqual(["lum refresh"]);
+    expect(changes).toEqual(["add SessionStart hook", "add Stop hook"]);
+  });
+
+  it("leaves the guard out unless asked, exactly like the Claude Code path", () => {
+    expect(commandsFor(codex(null).merged as Record<string, unknown>, "PreToolUse")).toEqual([]);
+    const armed = codex(null, { guard: true, guardPath: GUARD });
+    expect(commandsFor(armed.merged as Record<string, unknown>, "PreToolUse")).toEqual([GUARD]);
+  });
+
+  /**
+   * The one that would actually hurt. Codex defaults an unspecified hook timeout to 600 SECONDS,
+   * against Claude Code's 60. A guard without an explicit timeout is not a slow guard there, it is
+   * a tool call that hangs for ten minutes.
+   */
+  it("pins an explicit timeout on every hook it writes", () => {
+    const { merged } = codex(null, { guard: true, guardPath: GUARD });
+    const hooks = (merged as { hooks: Record<string, { hooks: Record<string, unknown>[] }[]> })
+      .hooks;
+    const all = Object.values(hooks).flatMap((groups) => groups.flatMap((g) => g.hooks));
+    expect(all.length).toBeGreaterThan(2);
+    for (const h of all) {
+      expect(typeof h.timeout, `${JSON.stringify(h)} has no explicit timeout`).toBe("number");
+      expect(h.timeout as number).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it("keeps the guard synchronous — an async hook cannot block at all", () => {
+    const { merged } = codex(null, { guard: true, guardPath: GUARD });
+    const pre = (merged as { hooks: Record<string, { hooks: Record<string, unknown>[] }[]> }).hooks
+      .PreToolUse;
+    expect(pre?.[0]?.hooks[0]?.async).toBeUndefined();
+  });
+
+  it("never rewrites a hook the user wrote themselves", () => {
+    const mine = { hooks: { Stop: [{ hooks: [{ type: "command", command: "my-own-thing" }] }] } };
+    const { merged } = codex(mine);
+    expect(commandsFor(merged as Record<string, unknown>, "Stop")).toEqual([
+      "my-own-thing",
+      "lum refresh",
+    ]);
+  });
+
+  it("is idempotent — re-running stacks nothing", () => {
+    const once = codex(null, { guard: true, guardPath: GUARD });
+    const twice = planCodexInstall(once.merged, "lum", { guard: true, guardPath: GUARD });
+    expect(twice.changes).toEqual([]);
+    expect(twice.merged).toEqual(once.merged);
+  });
+});
+
+describe("renderCodexPlan", () => {
+  it("tells the user to trust the hooks, because writing the file does not arm them", () => {
+    const text = renderCodexPlan(planCodexInstall(null, "lum"), "~/.codex/hooks.json").join("\n");
+    // Codex runs no non-managed hook until it is reviewed, and pins trust to the hook's hash.
+    expect(text).toContain("/hooks");
+    expect(text.toLowerCase()).toContain("trust");
+  });
+
+  it("states the statusline limitation rather than staying quiet about it", () => {
+    const text = renderCodexPlan(planCodexInstall(null, "lum"), "~/.codex/hooks.json").join("\n");
+    expect(text.toLowerCase()).toContain("no statusline");
   });
 });

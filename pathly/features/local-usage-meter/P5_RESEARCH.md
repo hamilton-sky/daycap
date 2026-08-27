@@ -241,16 +241,28 @@ like Cursor's spend data — not a gap waiting to be filled.
 
 Listed explicitly, per the task's acceptance criteria.
 
-1. **Does a Codex `PreToolUse` deny survive `--dangerously-bypass-approvals-and-sandbox` (`--yolo`)?**
-   The Codex docs are **silent**. This is the exact question P5-4 answered for Claude Code, and it has
-   no published answer for Codex. Combined with difference #5 above, assume **not guaranteed** until
-   tested. `P5-2` should resolve this empirically before any Codex enforcement claim is printed.
+1. ~~**Does a Codex `PreToolUse` deny survive `--dangerously-bypass-approvals-and-sandbox`
+   (`--yolo`)?**~~ **ANSWERED during P5-2 — YES.** The docs are still silent, but Codex is open
+   source, so this was settled by reading the dispatch path rather than by running a YOLO session.
+   In `codex-rs/core/src/tools/registry.rs` the call to `run_pre_tool_use_hooks` sits in the tool
+   dispatch path gated only by whether the tool participates in the hook path at all — never by
+   approval policy or sandbox mode. And `hook_permission_mode` in `codex-rs/core/src/hook_runtime.rs`
+   maps `AskForApproval::Never`, which is what `--yolo` sets, to the string `"bypassPermissions"`:
+   Codex not only runs the hook, it tells the hook it is in bypass mode. The residual caveat is
+   unchanged and is difference #5 — a tool whose path opts out of hooks entirely is never seen.
 2. **The empirical Claude Code bypass test was not executed** (see P5-4 §Limits). Documentary and
    implementation evidence only, from three independent places that agree.
 3. **The closed set of `tui.status_line` item identifiers is not enumerated** in any doc I found —
    only examples and a parenthetical list. Doesn't change the finding (none of them are "arbitrary
    text from a command"), but I can't print the full set.
-4. **Codex command-hook timeout semantics on expiry.** The fail-open statement I found
+4. **Codex requires a non-empty `permissionDecisionReason` on a deny** — found during P5-2 in
+   `codex-rs/hooks/src/engine/output_parser.rs`, which rejects the hook run outright with
+   "PreToolUse hook returned permissionDecision:deny without a non-empty permissionDecisionReason",
+   and a rejected run lets the tool call proceed. Claude Code has no such requirement. So on Codex
+   invariant 5 ("say why") is load-bearing for correctness, not manners: an empty reason there is
+   not an ugly block, it is **no block**. `guard.js` now enforces this before emitting.
+
+5. **Codex command-hook timeout semantics on expiry.** The fail-open statement I found
    ("Errors, missing servers, and unavailable tools don't block the operation") is in the *MCP tool
    hooks* section. I did not find an equivalent explicit sentence for a *command* hook that exceeds
    its timeout.
@@ -266,10 +278,12 @@ Flagged, not applied — `guard.js` enforcement behaviour is not to be changed s
   wrong — no statusline (confirmed, schema-level), but a real blocking hook exists.
 - **README: state the guarantee precisely.** Survives `--dangerously-skip-permissions`; turned off by
   `disableAllHooks`, `--bare`, or removing the hook. Do not write "cannot be bypassed".
-- **`P5-2` is unblocked and is now a build, not a doc-only task.** Scope: a Codex entrypoint sharing
-  the same pure `decide()`, an explicit short `timeout`, installer copy covering the `/hooks` trust
-  step, and question #1 above answered before any enforcement claim ships. Statusline parity is
-  **cancelled** — there is nothing to build against.
+- **`P5-2` is unblocked and is now a build, not a doc-only task.** ✅ **Shipped.** It needed no new
+  binary at all: `src/bin/guard.js` serves both hosts from one `decide()`, because both read
+  `tool_name` off stdin and honour the same deny payload. `lum install --codex [--guard]` writes
+  `~/.codex/hooks.json` with pinned timeouts and the `/hooks` trust step in its output, and
+  `lum doctor` gained a `surfaces` row. Statusline parity was **cancelled**, not deferred — there
+  is nothing to build against.
 - **Per `.prompts/01-research.md`, the next step is `.prompts/03-codex-parity.md`**, not
   `02-cursor-doctor.md`: P5-1 found a mechanism.
 

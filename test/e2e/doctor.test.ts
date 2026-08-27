@@ -211,3 +211,23 @@ describe("lum doctor — unknown is never a numeral", () => {
     expect(out(facts({ snapshot: snapshot({ totalUsd: 0, imputed: false }) }))).toContain("$0.00");
   });
 });
+
+/**
+ * P5-2. `doctor` is where someone stands when a surface is missing, so it has to say which
+ * surfaces can exist at all — otherwise "there is no meter in my Codex footer" reads as a bug in
+ * lum rather than as Codex having no statusline a third party can write into.
+ */
+describe("lum doctor — surfaces, so a missing one reads as a ceiling and not a fault", () => {
+  it("names the guard's hosts and the statusline's single host", () => {
+    const text = out(facts());
+    expect(text).toContain("surfaces");
+    expect(text).toContain("Codex");
+    // The limitation must be stated, not merely implied by omission.
+    expect(text).toMatch(/statusline: Claude Code only/);
+  });
+
+  it("says so even when nothing else is usable — it is a fact about lum, not about this machine", () => {
+    const text = out(facts({ available: false, snapshot: null, snapshotAgeSeconds: null }));
+    expect(text).toMatch(/statusline: Claude Code only/);
+  });
+});

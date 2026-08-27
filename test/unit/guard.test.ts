@@ -140,3 +140,65 @@ describe("guard — the deny payload", () => {
     });
   });
 });
+
+/**
+ * P5-2 — the Codex host. `decide()` is shared, so these are the only input differences.
+ *
+ * Codex reports the CANONICAL tool name (`apply_patch`) on stdin and offers the familiar
+ * spellings separately as `matcher_aliases`. If the exemption check ignored the aliases, one
+ * `allowTools: ["Edit"]` would mean "edits are exempt" on Claude Code and nothing at all on Codex
+ * — a block the user explicitly asked not to have, on one host only.
+ */
+describe("guard — allowTools is portable across hosts (Codex matcher aliases)", () => {
+  const editable = { guard: { enabled: true, denyAt: 1, mode: "deny", allowTools: ["Edit"] } };
+
+  it("exempts apply_patch when Edit is allowed and Codex offers it as an alias", () => {
+    expect(
+      d({
+        config: config(editable),
+        toolName: "apply_patch",
+        matcherAliases: ["Edit", "Write"],
+      }).allow,
+    ).toBe(true);
+  });
+
+  it("still denies apply_patch when no alias matches", () => {
+    expect(
+      d({ config: config(editable), toolName: "apply_patch", matcherAliases: ["Patch"] }).allow,
+    ).toBe(false);
+  });
+
+  it("denies the canonical name alone — aliases exempt, they do not blanket-allow", () => {
+    expect(d({ config: config(editable), toolName: "apply_patch" }).allow).toBe(false);
+  });
+
+  it.each([undefined, null, "Edit", 42, [42]])(
+    "a matcher_aliases of %j never throws and never wrongly exempts",
+    (aliases) => {
+      expect(d({ config: config(editable), toolName: "Bash", matcherAliases: aliases }).allow).toBe(
+        false,
+      );
+    },
+  );
+
+  it("Claude Code sends no aliases at all, and behaves exactly as before", () => {
+    expect(d({ toolName: "Read", matcherAliases: undefined }).allow).toBe(true);
+    expect(d({ toolName: "Bash", matcherAliases: undefined }).allow).toBe(false);
+  });
+});
+
+/**
+ * Codex's parser REJECTS `permissionDecision:deny` carrying an empty reason, and a rejected hook
+ * run lets the tool call proceed. So on that host invariant 5 is not politeness — a denial with no
+ * reason is not a block at all. Every denial `decide()` can produce must carry one.
+ */
+describe("guard — every denial carries a non-empty reason (Codex rejects one without)", () => {
+  it.each([
+    ["at the threshold exactly", { snapshot: snapshot({ totalUsd: 10 }) }],
+    ["far over", { snapshot: snapshot({ totalUsd: 1000 }) }],
+    ["a measured, non-imputed total", { snapshot: snapshot({ imputed: false }) }],
+    ["a fractional denyAt", { config: config({ guard: { enabled: true, denyAt: 0.5 } }) }],
+  ])("%s", (_name, over) => {
+    expect(denied(over).reason.trim().length).toBeGreaterThan(0);
+  });
+});

@@ -19,7 +19,7 @@ import { CcusageSource } from "../adapters/source/ccusage.shellout.ts";
 import { withTimeout } from "../adapters/source/timeout.ts";
 import { AtomicFileStore, defaultStateDir } from "../adapters/store/atomic.ts";
 import { runAlerts } from "../app/alert.ts";
-import { planInstall, renderPlan } from "../app/install.ts";
+import { planCodexInstall, planInstall, renderCodexPlan, renderPlan } from "../app/install.ts";
 import { isLatchState, LATCH_KEY, type LatchState } from "../app/latch.ts";
 import { buildSnapshot, SNAPSHOT_KEY, snapshotAgeSeconds } from "../app/meter.ts";
 import { parseConfigText } from "../domain/config.ts";
@@ -43,6 +43,8 @@ Usage:
   lum refresh          re-read the collector and update the cached snapshot
   lum install          print the Claude Code settings block (--write to apply)
                        --guard also installs the PreToolUse enforcement hook
+                       --codex targets Codex (~/.codex/hooks.json) instead;
+                       hooks only — Codex has no statusline lum can write into
   lum --version        print the version
   lum --help           print this message
 `;
@@ -180,25 +182,38 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
   return exitCode;
 }
 
-/** `lum install` — P3-5 + P3-6. Prints the settings block; `--write` applies it after a backup. */
+/**
+ * `lum install` — P3-5 + P3-6, and `--codex` from P5-2.
+ *
+ * Prints the settings block; `--write` applies it after a backup.
+ *
+ * Both hosts land in one function on purpose. The backup-then-write half is the part that touches
+ * a file the user owns and did not ask us to rewrite, and duplicating THAT for a second host is how
+ * one of the two copies quietly loses its `.bak`.
+ */
 export async function runInstall(
   write: boolean,
   guard = false,
   home: string = homedir(),
+  codex = false,
 ): Promise<number> {
-  const settingsPath = join(home, ".claude", "settings.json");
+  // Both are CONFIGURATION, never transcript data — the same distinction `test/gates/imports.test.ts`
+  // forced into the open for `.claude` and now holds for `.codex`.
+  const settingsPath = codex
+    ? join(home, ".codex", "hooks.json")
+    : join(home, ".claude", "settings.json");
   const existing = await readFile(settingsPath, "utf8")
     .then((t) => JSON.parse(t) as unknown)
     .catch(() => null);
 
-  const statuslinePath = resolveStatuslinePath();
-  const plan = planInstall(existing, "lum", statuslinePath, {
-    guard,
-    guardPath: resolveBinPath("guard.js"),
-  });
+  const guardPath = resolveBinPath("guard.js");
+  const plan = codex
+    ? planCodexInstall(existing, "lum", { guard, guardPath })
+    : planInstall(existing, "lum", resolveStatuslinePath(), { guard, guardPath });
 
   if (!write) {
-    process.stdout.write(`${renderPlan(plan, settingsPath).join("\n")}\n`);
+    const rendered = codex ? renderCodexPlan(plan, settingsPath) : renderPlan(plan, settingsPath);
+    process.stdout.write(`${rendered.join("\n")}\n`);
     return 0;
   }
   if (plan.changes.length === 0) {
@@ -215,6 +230,14 @@ export async function runInstall(
     return 74; // EX_IOERR
   }
   process.stdout.write(`Installed: ${plan.changes.join(", ")}\n${settingsPath}\n`);
+  // Writing the file is not the same as arming the hook on Codex, and saying "Installed" without
+  // this line would overstate what just happened: Codex runs no non-managed hook until it has been
+  // reviewed, and it pins that trust to the hook's hash.
+  if (codex) {
+    process.stdout.write(
+      "Now run `/hooks` in Codex and trust them — until then, none of this runs.\n",
+    );
+  }
   return 0;
 }
 
@@ -309,7 +332,12 @@ async function main(argv: readonly string[]): Promise<number> {
     case "refresh":
       return await runRefresh();
     case "install":
-      return await runInstall(argv.includes("--write"), argv.includes("--guard"));
+      return await runInstall(
+        argv.includes("--write"),
+        argv.includes("--guard"),
+        homedir(),
+        argv.includes("--codex"),
+      );
     case "doctor":
       return await runDoctor();
   }

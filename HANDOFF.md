@@ -31,7 +31,8 @@ node dist/lum.js today             # a real number from your own transcripts
 node dist/lum.js doctor            # why the number is what it is
 ```
 
-Six commands: `today`, `doctor`, `refresh`, `install [--write] [--guard]`, `--version`, `--help`.
+Six commands: `today`, `doctor`, `refresh`, `install [--write] [--guard] [--codex]`,
+`--version`, `--help`.
 
 ---
 
@@ -58,12 +59,12 @@ src/app/
   meter.ts           pull source -> snapshot. Integer cents. Degraded snapshots are NOT cached
   latch.ts           L1-L9. The correctness centrepiece
   alert.ts           L7: persist the latch, THEN notify
-  install.ts         the settings.json block
+  install.ts         the settings.json block, and the Codex hooks.json block (P5-2)
 
 src/bin/
   lum.ts             CLI + the single composition root shared by today/refresh
   statusline.js      HOT PATH. node:fs/os/path/url only. Always exit 0
-  guard.js           HOT PATH. PreToolUse enforcement. Fails OPEN on every fault
+  guard.js           HOT PATH. PreToolUse enforcement, Claude Code AND Codex. Fails OPEN
 ```
 
 ### The hot path is a hard constraint, not a preference
@@ -92,7 +93,9 @@ guard**. Our collector read is ~90 ms warm and ~1 s cold — either would silent
 6. **The guard fails open.** Every fault path allows. It is also off twice over: `--guard` at install
    *and* `guard.enabled` in config.
 7. **Never parse a transcript.** `~/.claude/projects`, `.jsonl`, `.codex/sessions`, `.cursor` are
-   forbidden in `src/`. `~/.claude/settings.json` is the one narrow exception, for the installer.
+   forbidden in `src/`. `~/.claude/settings.json` and `~/.codex/hooks.json` are the two narrow
+   exceptions, both for the installer, and only `src/bin/lum.ts` may name either directory. The
+   distinction is CONFIG the user owns versus DATA a collector owns — not "which vendor".
 
 ---
 
@@ -101,16 +104,31 @@ guard**. Our collector read is ~90 ms warm and ~1 s cold — either would silent
 | | Claude Code | Codex | Cursor |
 |---|---|---|---|
 | `lum today` / `doctor` / notifications | ✅ | ✅ **verified on real data** | ❌ |
-| statusline | ✅ | ❌ | ❌ |
-| guard (enforcement) | ✅ | ❌ | ❌ |
+| statusline | ✅ | ❌ **never** — see below | ❌ |
+| guard (enforcement) | ✅ | ✅ *weaker guarantee* — see below | ❌ |
+
+**The two guard ticks are not the same tick.** Claude Code documents that a hook deny applies even
+in `bypassPermissions`; OpenAI explicitly declines to make that promise, calling hooks "a useful
+guardrail, not a complete enforcement boundary". Do not flatten them into one claim in a README.
 
 - **Codex works** for the numbers. Verified 2026-08-27 on a real mixed day: `claude-code $180.60`
   and `codex $1.37`, split from `modelBreakdowns[].modelName`. One spawn — `ccusage daily` already
   includes Codex, so spawning `ccusage codex daily` as well would **double-count**.
-- **Codex has no statusline and no guard** because both are Claude Code hook mechanisms. Whether
-  Codex has any equivalent is `P5-1`, unresearched.
+- **Codex has a guard as of `P5-2`.** `P5-1` found that Codex CLI has a `PreToolUse` hook whose deny
+  payload is byte-identical to Claude Code's, so `src/bin/guard.js` serves both hosts with one
+  `decide()` and no second binary. `lum install --codex [--guard]` writes `~/.codex/hooks.json`.
+  Three things differ and are handled in code, each commented where it lives: `apply_patch` vs
+  `Edit`/`Write` naming, a **600-second** default hook timeout (against Claude Code's 60), and a
+  hook **trust** gate — Codex runs no non-managed hook until the user opens `/hooks` and trusts it,
+  and it pins that trust to the hook's hash, so editing the file disarms it again.
+- **Codex has no statusline, and cannot.** `tui.status_line` takes a closed list of Codex's own
+  built-in item identifiers — there is no command contract and no stdin JSON, so no third party can
+  render into that footer. This is schema-level, like Cursor's spend data: a ceiling, not a gap.
+  `lum doctor` now says so on its `surfaces` row rather than leaving it to be discovered.
 - **Cursor exposes no local spend data at all** — schema-level, not empty-on-this-machine. It can
   never be priced from disk. `P5-3` makes `doctor` say so out loud instead of silently omitting it.
+
+Everything above is sourced in `pathly/features/local-usage-meter/P5_RESEARCH.md`.
 
 ---
 
@@ -124,10 +142,12 @@ guard**. Our collector read is ~90 ms warm and ~1 s cold — either would silent
 | **ARCH-Q1** | `accountMode` default | recommend `"auto"` over `"subscription"` | high |
 | **ARCH-Q3** | Threshold wording | three wordings shipped (usd+api, usd+subscription, rate-limit) | high |
 
-Two facts about the guard are **unconfirmed** and are `P5-4` / `P5-5`:
-does `deny` survive `--dangerously-skip-permissions`, and what is the exact `permissionDecision`
-enum? `guard.js` emits `deny` and fails open if that is wrong — the safe direction — but shipping
-against a guessed enum is not.
+Both facts about the guard that were **unconfirmed** here are now closed by `P5-4` / `P5-5`,
+and both came back in the guard's favour: `deny` **does** survive `--dangerously-skip-permissions`
+(hooks are step 1 of the permission flow; bypass is applied at step 4), and the enum is exactly
+`allow` / `deny` / `ask` / `defer`. `guard.js` was already emitting the right shape, so nothing
+changed. What the README must NOT say is "cannot be bypassed" — `disableAllHooks`, `--bare` and
+removing the hook all still turn it off. See `P5_RESEARCH.md`.
 
 ---
 

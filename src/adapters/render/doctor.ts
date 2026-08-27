@@ -160,6 +160,14 @@ export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: n
     );
   }
 
+  // --- surfaces ---------------------------------------------------------------------------------
+  // P5-2. This is a static statement of what CAN exist, not of what is installed, and it is here
+  // because "why is there no meter in my Codex footer?" is a question the number itself can never
+  // answer. Codex has no statusline a third party can write into — `tui.status_line` takes a closed
+  // list of its own built-in items (P5-1, verified against the docs and the source) — so this is a
+  // ceiling, not a gap. Saying so costs one line; leaving it out costs someone an afternoon.
+  lines.push(row("surfaces", OK, "guard: Claude Code, Codex · statusline: Claude Code only"));
+
   // --- signal -----------------------------------------------------------------------------------
   const echo = facts.echoSeen;
   lines.push(
