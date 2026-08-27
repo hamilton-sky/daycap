@@ -13,13 +13,15 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { NullNotifier, OsNotifier } from "../adapters/notify/notifier.ts";
+import { type DoctorFacts, renderDoctor } from "../adapters/render/doctor.ts";
 import { renderToday } from "../adapters/render/table.ts";
 import { CcusageSource } from "../adapters/source/ccusage.shellout.ts";
 import { withTimeout } from "../adapters/source/timeout.ts";
 import { AtomicFileStore, defaultStateDir } from "../adapters/store/atomic.ts";
 import { runAlerts } from "../app/alert.ts";
 import { planInstall, renderPlan } from "../app/install.ts";
-import { buildSnapshot, SNAPSHOT_KEY } from "../app/meter.ts";
+import { isLatchState, LATCH_KEY, type LatchState } from "../app/latch.ts";
+import { buildSnapshot, SNAPSHOT_KEY, snapshotAgeSeconds } from "../app/meter.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
 import type { UsageSnapshot } from "../domain/types.ts";
@@ -107,6 +109,70 @@ function resolveStatuslinePath(): string {
     new URL("../src/bin/statusline.js", import.meta.url), // built: dist/lum.js -> src/bin/...
   ].map((u) => fileURLToPath(u));
   return candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1] ?? "";
+}
+
+/**
+ * `lum doctor` — P4-4. Answers "why is the number what it is" in one screen.
+ *
+ * It deliberately does NOT refresh: a diagnostic that changes the thing it is diagnosing makes an
+ * intermittent fault impossible to catch. It reports what is on disk right now.
+ */
+export async function runDoctor(home: string = homedir()): Promise<number> {
+  const configPath = join(home, ".localusagemeter", "config.json");
+  const configText = await readFile(configPath, "utf8").catch(() => null);
+  const { config, warnings } = parseConfigText(configText);
+
+  const store = new AtomicFileStore(defaultStateDir(home));
+  const collector = new CcusageSource();
+
+  const snapshot = await store.read<UsageSnapshot>(SNAPSHOT_KEY).catch(() => null);
+
+  // A latch we cannot parse is `recovered` (L6) — the reason no alert fired today, and precisely
+  // the thing a user would otherwise never find out.
+  let latch: DoctorFacts["latch"] = { present: false, recovered: false, firedToday: [] };
+  try {
+    const raw = await store.read<unknown>(LATCH_KEY);
+    if (raw !== null && !isLatchState(raw))
+      latch = { present: true, recovered: true, firedToday: [] };
+    else if (raw !== null) {
+      const l = raw as LatchState;
+      const sameDay = snapshot === null || l.usageDay === snapshot.usageDay;
+      latch = {
+        present: true,
+        recovered: false,
+        firedToday: sameDay ? Object.keys(l.fired) : [],
+      };
+    }
+  } catch {
+    latch = { present: true, recovered: true, firedToday: [] };
+  }
+
+  const echoRaw = await store.read<Record<string, unknown>>("stdin-echo").catch(() => null);
+  const echoSeen =
+    echoRaw === null
+      ? null
+      : {
+          ageSeconds: Math.max(
+            0,
+            (Date.now() - Date.parse(String(echoRaw.seenAtUtc ?? ""))) / 1000,
+          ),
+        };
+
+  const { lines, exitCode } = renderDoctor({
+    home,
+    sourceId: collector.id,
+    attempts: collector.probe(),
+    available: await collector.available(),
+    snapshot,
+    snapshotAgeSeconds: snapshot === null ? null : snapshotAgeSeconds(snapshot, Date.now()),
+    latch,
+    config,
+    configPath: configText === null ? `${configPath} (absent, using defaults)` : configPath,
+    configWarnings: warnings,
+    echoSeen: echoSeen !== null && Number.isFinite(echoSeen.ageSeconds) ? echoSeen : null,
+  });
+  process.stdout.write(`${lines.join("\n")}\n`);
+  return exitCode;
 }
 
 /** `lum install` — P3-5 + P3-6. Prints the settings block; `--write` applies it after a backup. */
@@ -233,8 +299,7 @@ async function main(argv: readonly string[]): Promise<number> {
     case "install":
       return await runInstall(argv.includes("--write"));
     case "doctor":
-      process.stderr.write(`lum ${command}: not implemented yet (P4-4)\n`);
-      return 69; // EX_UNAVAILABLE
+      return await runDoctor();
   }
 }
 

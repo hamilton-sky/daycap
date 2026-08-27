@@ -18,7 +18,9 @@
  */
 
 import { type ChildProcess, execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { delimiter, join } from "node:path";
 import { SourceIncompatibleError } from "../../domain/errors.ts";
 import type { SourceGranularity, UsageSourcePort } from "../../domain/ports.ts";
 import type { ToolSpend, UsageWindow } from "../../domain/types.ts";
@@ -26,6 +28,15 @@ import { usageDayFor } from "../../domain/window.ts";
 
 /** How the binary is invoked. `prefixArgs` covers a JS launcher that must run under node. */
 export type ResolvedBinary = { command: string; prefixArgs: readonly string[] };
+
+/**
+ * One rung of the resolution ladder, and what happened on it.
+ *
+ * `lum doctor` prints these verbatim. R1's whole remedy depends on the user being told WHERE we
+ * looked, not just that we failed — "ccusage not found" sends someone to Google; "looked for
+ * @ccusage/ccusage-darwin-arm64 in node_modules, then ccusage on PATH" tells them what to install.
+ */
+export type ResolutionAttempt = { where: string; found: boolean; detail?: string | undefined };
 
 export type CcusageOptions = {
   /** Explicit escape hatch — `config.sources.ccusage.binPath`. Always wins. */
@@ -50,6 +61,55 @@ const PLATFORM_PACKAGES = [`@ccusage/ccusage-${process.platform}-${process.arch}
  * resolution, which is a non-loopback network call, which P1-9's network gate fails the build
  * for. Using it would also cost ~2.6 s cold against the ~35 ms this path measures.
  */
+/** The ladder, as data. `defaultResolveBinary` walks it; `probe()` reports on it. */
+export function resolutionLadder(binPath?: string): ResolutionAttempt[] {
+  const out: ResolutionAttempt[] = [];
+  if (binPath !== undefined && binPath.length > 0) {
+    out.push({ where: `config sources.ccusage.binPath (${binPath})`, found: existsSync(binPath) });
+  }
+  const fromEnv = process.env.LUM_CCUSAGE_BIN;
+  if (fromEnv !== undefined && fromEnv.length > 0) {
+    out.push({ where: `LUM_CCUSAGE_BIN (${fromEnv})`, found: existsSync(fromEnv) });
+  }
+  for (const pkg of PLATFORM_PACKAGES) {
+    const resolved = platformBinary(pkg);
+    out.push({
+      where: `${pkg} in node_modules`,
+      found: resolved !== null,
+      detail: resolved ?? undefined,
+    });
+  }
+  const onPath = whichCcusage();
+  out.push({ where: "ccusage on PATH", found: onPath !== null, detail: onPath ?? undefined });
+  return out;
+}
+
+/** Resolve a platform package's binary, or null if it is not installed for this platform. */
+function platformBinary(pkg: string): string | null {
+  try {
+    const require = createRequire(import.meta.url);
+    const manifest = require.resolve(`${pkg}/package.json`);
+    const dir = manifest.slice(0, Math.max(manifest.lastIndexOf("/"), manifest.lastIndexOf("\\")));
+    const exe = join(dir, process.platform === "win32" ? "ccusage.exe" : "ccusage");
+    return existsSync(exe) ? exe : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Is a bare `ccusage` on PATH? Resolved once; `execFile` would search PATH anyway. */
+function whichCcusage(): string | null {
+  const exts = process.platform === "win32" ? [".exe", ".cmd", ""] : [""];
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (dir === "") continue;
+    for (const ext of exts) {
+      const candidate = join(dir, `ccusage${ext}`);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
 function defaultResolveBinary(binPath?: string): ResolvedBinary | null {
   if (binPath !== undefined && binPath.length > 0) {
     return { command: binPath, prefixArgs: [] };
@@ -60,17 +120,9 @@ function defaultResolveBinary(binPath?: string): ResolvedBinary | null {
   if (fromEnv !== undefined && fromEnv.length > 0) {
     return { command: fromEnv, prefixArgs: [] };
   }
-  const require = createRequire(import.meta.url);
   for (const pkg of PLATFORM_PACKAGES) {
-    try {
-      // The platform package ships the native binary; resolving its package.json gives us its dir.
-      const manifest = require.resolve(`${pkg}/package.json`);
-      const dir = manifest.slice(0, manifest.lastIndexOf("/"));
-      const exe = process.platform === "win32" ? "ccusage.exe" : "ccusage";
-      return { command: `${dir}/${exe}`, prefixArgs: [] };
-    } catch {
-      // Not installed for this platform — fall through to PATH.
-    }
+    const exe = platformBinary(pkg);
+    if (exe !== null) return { command: exe, prefixArgs: [] };
   }
   // Tier 3: a global install. `execFile` searches PATH for a bare command name.
   return { command: "ccusage", prefixArgs: [] };
@@ -185,6 +237,7 @@ export class CcusageSource implements UsageSourcePort {
 
   #resolve: () => ResolvedBinary | null;
   #maxBuffer: number;
+  #binPath: string | undefined;
   /**
    * The child currently in flight, if any. Tracked so a timeout can KILL it rather than abandon
    * it — an abandoned `ccusage` on every statusline tick is ccusage issue #455 (spawns
@@ -193,6 +246,7 @@ export class CcusageSource implements UsageSourcePort {
   #child: ChildProcess | null = null;
 
   constructor(options: CcusageOptions = {}) {
+    this.#binPath = options.binPath;
     this.#resolve = options.resolveBinary ?? (() => defaultResolveBinary(options.binPath));
     this.#maxBuffer = options.maxBufferBytes ?? DEFAULT_MAX_BUFFER;
   }
@@ -239,6 +293,11 @@ export class CcusageSource implements UsageSourcePort {
    */
   inFlightPid(): number | undefined {
     return this.#child?.pid;
+  }
+
+  /** What this adapter looked for, and where. Rendered verbatim by `lum doctor`. */
+  probe(): ResolutionAttempt[] {
+    return resolutionLadder(this.#binPath);
   }
 
   /** Kill the in-flight collector. Wired to `withTimeout`'s `onTimeout` by the caller. */
