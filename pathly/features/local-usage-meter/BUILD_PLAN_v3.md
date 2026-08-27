@@ -1,5 +1,11 @@
 # BUILD PLAN v3 — the path to a shippable `lum`
 
+**SUPERSEDED IN PART — see `HANDOFF.md` (2026-08-27) for current state.** Everything in §4's DAG
+through `P4-4` is now merged to `main`, plus a guard that did not exist when this was written. §5's
+gate recommendations still stand; §1's competitive framing is CORRECTED by
+`COMPETITIVE_ANALYSIS.md` — a proxy *can* see subscription usage, so the differentiator is setup
+cost, not capability.
+
 **Status: 2026-08-26.** Supersedes the sequencing in `IMPLEMENTATION_PLAN.md`. That document
 remains authoritative for individual task acceptance criteria; this one is authoritative for
 **order, gates, and scope**.
@@ -116,7 +122,17 @@ Changes from `IMPLEMENTATION_PLAN.md`:
 5. **New `M-1` / `M-2` measurement tasks** inserted before `P1-3`. Each can delete work.
 
 ```
-DONE ═══════════════════════════════════════════════════════════
+DONE (as of 2026-08-27, all merged to main) ═══════════════════════
+ P1-0..P1-4, P1-6..P1-9   scaffold, domain, contract suite, ccusage
+                          adapter, store, meter, today, gates       ✅
+ P2-1, P2-3, P2-4, P2-5   budget, latch (L1-L9), notifier, wiring   ✅
+ P3-1..P3-6               statusline, latency gates, lum install    ✅
+ P4-1, P4-4               ccusage primary, lum doctor               ✅
+ GUARD                    PreToolUse enforcement (PR #7)            ✅  ← not in the original plan
+ P0-1/P0-2, P2-2, P4-5    retracted (budi probe, pacing, harness)   ✂
+NEW GOAL p5-multi-tool-parity — P5-1..P5-5, see HANDOFF.md §5/§7
+
+ORIGINAL PLAN BELOW (kept for its reasoning) ══════════════════════
  P1-0  scaffold, CI, verify                                  ✅
  P1-1  domain types + ports (+ v3 amendments §3)             ✅
  P1-2  usageDayFor / usageDayRange, 100% branch              ✅
