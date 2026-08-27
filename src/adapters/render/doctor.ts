@@ -249,11 +249,13 @@ export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: n
       row(
         "unpriced",
         WARN,
-        // "anywhere on disk" is doing real work: it says this is a ceiling, not a missing feature,
-        // so nobody goes looking for the config flag that would switch it on. The wording is also
-        // length-tuned to the 65 columns this row has — a longer sentence gets silently clipped
-        // mid-word by `clip`, which the 80-column test cannot see. See doctor.test.ts.
-        `${facts.unpriceableFound.join(", ")} installed — exposes no local spend data anywhere on disk`,
+        // Wording CORRECTED 2026-08-27. It used to read "exposes no local spend data anywhere on
+        // disk", which asserted a permanent fact about someone else's product and was already going
+        // stale — see `domain/surfaces.ts` for what the recheck found. "not counted, no priced local
+        // data" says what we do and what we lack, both of which we can actually vouch for.
+        // Length-tuned to the 65 columns this row has: a longer sentence is silently clipped mid-word
+        // by `clip`, which the 80-column test cannot see. See doctor.test.ts.
+        `${facts.unpriceableFound.join(", ")} installed — not counted, no priced local data`,
       ),
     );
   }
