@@ -65,7 +65,7 @@ export type InstallOptions = {
 
 export function planInstall(
   existing: unknown,
-  lumCommand: string,
+  cliCommand: string,
   statuslinePath: string,
   options: InstallOptions = {},
 ): InstallPlan {
@@ -84,7 +84,7 @@ export function planInstall(
   }
 
   const hooks: Record<string, unknown> = isRecord(base.hooks) ? { ...base.hooks } : {};
-  const refresh = `${lumCommand} refresh`;
+  const refresh = `${cliCommand} refresh`;
   for (const event of ["SessionStart", "Stop"] as const) {
     const list = Array.isArray(hooks[event]) ? [...(hooks[event] as unknown[])] : [];
     // Idempotent: match on OUR command, so re-running never stacks duplicates and never touches
@@ -142,14 +142,14 @@ export function planInstall(
  */
 export function planCodexInstall(
   existing: unknown,
-  lumCommand: string,
+  cliCommand: string,
   options: InstallOptions = {},
 ): InstallPlan {
   const base: SettingsBlock = isRecord(existing) ? { ...existing } : {};
   const changes: string[] = [];
   const hooks: Record<string, unknown> = isRecord(base.hooks) ? { ...base.hooks } : {};
 
-  const refresh = `${lumCommand} refresh`;
+  const refresh = `${cliCommand} refresh`;
   for (const event of ["SessionStart", "Stop"] as const) {
     const list = Array.isArray(hooks[event]) ? [...(hooks[event] as unknown[])] : [];
     const already = list.some(
@@ -234,7 +234,7 @@ export function renderPlan(plan: InstallPlan, settingsPath: string): string[] {
     `refreshes when you run \`${CLI_NAME}\` by hand, and a budget guardrail that is quietly out of date`,
     "is worse than none.",
     "",
-    "`lum install --guard` additionally installs a PreToolUse hook that DENIES tool calls once",
+    `\`${CLI_NAME} install --guard\` additionally installs a PreToolUse hook that DENIES tool calls once`,
     "you are over the allowance. That is enforcement, not a warning — it is off unless you ask,",
     "and it also needs `guard.enabled: true` in your config before it will deny anything.",
   ];

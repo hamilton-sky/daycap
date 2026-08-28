@@ -19,7 +19,7 @@
  *      on the statusline. Fail quiet, not loud.
  *  L7  persist the latch, THEN notify. A notifier crash costs one alert; the reverse order costs
  *      an alert on every single invocation.
- *  L8  two `lum` processes racing: rename is atomic, last writer wins, a duplicate alert is
+ *  L8  two `daycap` processes racing: rename is atomic, last writer wins, a duplicate alert is
  *      possible and accepted. Documented, not engineered around — a lock is how you get a stale
  *      lockfile that silences the tool forever.
  *  L9  fire ONLY from trusted data (fresh-full or fresh-partial). A stale, source-down or

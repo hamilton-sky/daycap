@@ -76,7 +76,7 @@ export function renderToday(
   if (stale) marks.push("⋯");
 
   const lines: string[] = [];
-  const head = `lum — ${snap.usageDay}${marks.length > 0 ? ` ${marks.join("")}` : ""}`;
+  const head = `${CLI_NAME} — ${snap.usageDay}${marks.length > 0 ? ` ${marks.join("")}` : ""}`;
   lines.push(head);
   lines.push("");
 
