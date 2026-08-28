@@ -128,7 +128,7 @@ export function decide({ snapshot, config, toolName, matcherAliases, nowMs }) {
   return {
     allow: false,
     reason:
-      `lum: ${pct}% of your ${noun} ($${spent.toFixed(2)} of $${limit.toFixed(2)}) — ` +
+      `daycap: ${pct}% of your ${noun} ($${spent.toFixed(2)} of $${limit.toFixed(2)}) — ` +
       `over the ${Math.round(denyAt * 100)}% guard. Raise dailyBudgetUsd, set guard.enabled ` +
       `false, or wait for the daily reset.`,
   };

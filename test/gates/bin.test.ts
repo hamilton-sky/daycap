@@ -116,3 +116,37 @@ installed("gate: the tool works the way users actually install it", () => {
     expect(out.trim()).toBe(pkg.version);
   });
 });
+
+/**
+ * No shipped file may put the retired product name in a string a user can see.
+ *
+ * Seven separate places in this codebase still said `lum` after the rename, and every one was found
+ * by USING the tool: the `today` header, the help screen, the error prefix, and — worst — the
+ * guard's denial reason, which is the single most important sentence this product ever writes. It
+ * appears in the user's session at the moment their work is blocked, and it was telling them to run
+ * a command that no longer exists.
+ *
+ * Comments are stripped, because explaining the history is not the same as shipping it. `guard.js`
+ * and `statusline.js` cannot import CLI_NAME — the import gate limits them to four node: modules —
+ * so their copies are hand-written and this is what keeps them honest.
+ */
+describe("gate: no shipped file speaks the retired name", () => {
+  const HOT = ["statusline.js", "guard.js"];
+  const strip = (t: string): string =>
+    t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+
+  it.each(HOT)("%s uses no string literal containing the old name", (file) => {
+    const text = strip(readFileSync(join(root, "src", "bin", file), "utf8"));
+    // Only string literals matter. A variable or identifier named `lumFoo` is invisible to users;
+    // a quoted or backticked `lum` reaches their screen.
+    const literals = [...text.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)].map((m) => m[2]);
+    const offenders = literals.filter((l) => /\blum\b/.test(l ?? ""));
+    expect(offenders, `${file} ships a user-visible "lum"`).toEqual([]);
+  });
+
+  it("the built bundle does not either", () => {
+    const text = strip(readFileSync(join(root, "dist", "daycap.js"), "utf8"));
+    const literals = [...text.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)].map((m) => m[2]);
+    expect(literals.filter((l) => /\blum\b/.test(l ?? ""))).toEqual([]);
+  });
+});

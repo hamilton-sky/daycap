@@ -319,7 +319,9 @@ export async function runInstall(
     if (existing !== null) await copyFile(settingsPath, `${settingsPath}.bak`);
     await writeFile(settingsPath, `${JSON.stringify(plan.merged, null, 2)}\n`, "utf8");
   } catch (err) {
-    process.stderr.write(`lum install: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(
+      `${CLI_NAME} install: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
     return 74; // EX_IOERR
   }
   process.stdout.write(`Installed: ${plan.changes.join(", ")}\n${settingsPath}\n`);
@@ -419,7 +421,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const { command, unknown } = parseArgs(argv);
 
   if (unknown !== undefined) {
-    process.stderr.write(`lum: unknown command ${JSON.stringify(unknown)}\n\n${USAGE}`);
+    process.stderr.write(`${CLI_NAME}: unknown command ${JSON.stringify(unknown)}\n\n${USAGE}`);
     return 2;
   }
 
