@@ -219,6 +219,19 @@ That is the drain order — no separate scheduler needed.
   Log the date, the machine and layer D's four numbers here when you do. A budget nobody checks is
   not a budget.
 
+  | Date | Machine | bare p95 | script p95 | delta | median pair | Verdict |
+  |---|---|---|---|---|---|---|
+  | 2026-08-28 | macOS 26.6.2, arm64, 15 cores, node v26.6.0, load 3.5 | 24.2 ms | 27.2 ms | **3.0 ms** | 3.6 ms | **PASS** — 27.2 ms against the 150 ms budget, 5.5x inside |
+
+  Read that row as: an empty `node -e ""` costs 24.2 ms on this machine, so **89% of the wall clock
+  a user waits for is the interpreter starting and 3 ms is ours.** The two independent estimates of
+  our own cost — the p95 delta and the median of interleaved pairs — agree at ~3 ms, which is what
+  makes the figure believable rather than a single lucky sample.
+
+  It also confirms the structural claim behind the hot-path import gate: the statusline really is a
+  thin cache reader. Had it grown a dependency graph or started asking the collector, delta would be
+  in the hundreds of milliseconds, not 3.
+
 ---
 
 ## 8. Conventions that made this codebase work
