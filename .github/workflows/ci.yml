@@ -51,6 +51,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # BUILD UNDER 22, TEST UNDER 20 — and the build must happen here, before the switch.
+      #
+      # Two reasons. The bundler runs under the toolchain, like every other leg. And the thing a
+      # Node 20 user actually executes is `dist/daycap.js`, so a compat job that never builds is
+      # testing source it will never run. That gap was not theoretical: the symlink and
+      # version gates in bin.test.ts both failed here with "Cannot find module dist/daycap.js"
+      # while passing on all three `pnpm verify` legs, which build as part of verify.
+      - run: pnpm build
       - uses: actions/setup-node@v4
         with:
           node-version: 20

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { BUILT } from "../support/bin-path.ts";
 
 /**
  * Gate: every path declared in package.json `bin` must actually exist after a build, and must
@@ -77,7 +78,18 @@ describe("package.json bin", () => {
  * The rest of the e2e suite runs `node dist/daycap.js` by path. That is the one invocation a global
  * install never uses, and both bugs below hid in the gap.
  */
-describe("gate: the tool works the way users actually install it", () => {
+/**
+ * Needs a built `dist/`, so it skips on an unbuilt tree with that written reason — the same guard
+ * the three real-process suites use, via the same derived path.
+ *
+ * The skip is narrow on purpose. `BUILT` comes from `test/support/bin-path.ts`, which reads the path
+ * out of package.json's `bin` block, so "the tree is not built" cannot quietly become "the binary
+ * was renamed" — that conflation is what silently disappeared eleven tests during the rename. And
+ * CI no longer relies on the skip at all: every leg, including node20-compat, now builds first.
+ */
+const installed = BUILT ? describe : describe.skip;
+
+installed("gate: the tool works the way users actually install it", () => {
   it("runs when invoked through a SYMLINK, as `npm i -g` puts it on PATH", () => {
     // The bug: `npm i -g` symlinks /opt/homebrew/bin/daycap -> .../dist/daycap.js, so argv[1] is the
     // link and import.meta.url is the target. The old main-module guard compared them directly, so
