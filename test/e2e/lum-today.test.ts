@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_SOURCE, renderToday, STALE_AFTER_SECONDS } from "../../src/adapters/render/table.ts";
+import { CLI_NAME, LEGACY_CLI_NAME } from "../../src/domain/brand.ts";
 import { DEFAULT_CONFIG, parseConfigText } from "../../src/domain/config.ts";
 import type { Config, SourceHealth, ToolSpend, UsageSnapshot } from "../../src/domain/types.ts";
 
@@ -142,5 +143,34 @@ describe("day-boundary approximation", () => {
   });
   it("does not mark it otherwise", () => {
     expect(render(snapshot({ dayBoundaryApprox: false }))).not.toContain("~");
+  });
+});
+
+/**
+ * The header, pinned to the brand constant.
+ *
+ * NOTHING ASSERTED THIS, which is how the rename to `daycap` shipped a `lum today` whose first line
+ * still read "lum — 2026-08-28". Every other user-visible string was caught by a test holding a
+ * literal; this one was caught by nobody, and it is the most prominent line the command prints.
+ *
+ * Asserted against CLI_NAME rather than against "daycap" on purpose: a test holding the literal is
+ * exactly what made the other renames noisy, and a test holding nothing is what let this one through.
+ */
+describe("renderToday — the header carries the product name", () => {
+  it("starts with the CLI name, not a hardcoded one", () => {
+    const first = render(snapshot(), cfg({ dailyBudgetUsd: 10 })).split("\n")[0] ?? "";
+    expect(first).toContain(CLI_NAME);
+    expect(first).toContain(snapshot().usageDay);
+  });
+
+  it("says so even in the degraded no-source line", () => {
+    expect(NO_SOURCE).toContain(CLI_NAME);
+  });
+
+  it("carries no stale product name anywhere in a rendered table", () => {
+    // The generalisation: whatever the previous name was, it must not survive in output. This is the
+    // assertion whose absence let the header rot for a whole rename.
+    const text = render(snapshot(), cfg({ dailyBudgetUsd: 10 }));
+    expect(text).not.toContain(LEGACY_CLI_NAME);
   });
 });

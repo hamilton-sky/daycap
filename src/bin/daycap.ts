@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `lum` CLI entrypoint.
+ * `daycap` CLI entrypoint.
  *
  * P1-0 scaffold: argument routing and exit-code discipline only. The commands themselves land in
  * P1-8 (`today`), P4-5 (`doctor`) and P2 (`refresh`), each behind `UsageSourcePort` — never

@@ -24,7 +24,7 @@ export type MeterDeps = {
   source: UsageSourcePort;
   clock: ClockPort;
   config: Config;
-  /** Optional: `lum today` can render without persisting, e.g. under `--no-cache`. */
+  /** Optional: `daycap today` can render without persisting, e.g. under `--no-cache`. */
   store?: StorePort;
 };
 
@@ -139,8 +139,8 @@ async function persist(deps: MeterDeps, snapshot: UsageSnapshot): Promise<UsageS
   try {
     await deps.store.write(SNAPSHOT_KEY, snapshot);
   } catch {
-    // A read-only or full state directory must not stop `lum today` from printing. The failure
-    // surfaces in `lum doctor`, which is where an unwritable cache belongs.
+    // A read-only or full state directory must not stop `daycap today` from printing. The failure
+    // surfaces in `daycap doctor`, which is where an unwritable cache belongs.
   }
   return snapshot;
 }
