@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { NullNotifier, OsNotifier } from "../adapters/notify/notifier.ts";
+import { renderConfig } from "../adapters/render/config-view.ts";
 import { type DoctorFacts, renderDoctor } from "../adapters/render/doctor.ts";
 import { renderToday } from "../adapters/render/table.ts";
 import { resolveSource, UnavailableSource } from "../adapters/source/resolve.ts";
@@ -45,21 +46,23 @@ const VERSION = "0.1.0";
  */
 const SOURCE_TIMEOUT_MS = 3000;
 
-const USAGE = `lum — local budget guardrail for AI coding tools
+export const USAGE = `${CLI_NAME} — local budget guardrail for AI coding tools
 
 Usage:
-  lum today            today's spend across every configured tool, vs your allowance
-  lum doctor           which collector was found, how fresh it is, what is missing
-  lum refresh          re-read the collector and update the cached snapshot
-  lum install          print the Claude Code settings block (--write to apply)
-                       --guard also installs the PreToolUse enforcement hook
-                       --codex targets Codex (~/.codex/hooks.json) instead;
-                       hooks only — Codex has no statusline lum can write into
-  lum --version        print the version
-  lum --help           print this message
+  ${CLI_NAME} today            today's spend across every tool, vs your allowance
+  ${CLI_NAME} doctor           which collector was found, how fresh, what is missing
+  ${CLI_NAME} config           every setting, its value, and whether you set it
+                          --edit opens the file in $EDITOR
+  ${CLI_NAME} refresh          re-read the collector and update the cached snapshot
+  ${CLI_NAME} install          print the Claude Code settings block (--write applies)
+                          --guard also installs the PreToolUse enforcement hook
+                          --codex targets Codex (~/.codex/hooks.json) instead;
+                          hooks only — Codex has no statusline to write into
+  ${CLI_NAME} --version        print the version
+  ${CLI_NAME} --help           print this message
 `;
 
-type Command = "today" | "doctor" | "refresh" | "install" | "version" | "help";
+type Command = "today" | "doctor" | "refresh" | "install" | "config" | "version" | "help";
 
 /** Pure: maps argv to a command so it can be tested without spawning a process. */
 export function parseArgs(argv: readonly string[]): { command: Command; unknown?: string } {
@@ -70,6 +73,7 @@ export function parseArgs(argv: readonly string[]): { command: Command; unknown?
     case "doctor":
     case "refresh":
     case "install":
+    case "config":
       return { command: first };
     case "-v":
     case "--version":
@@ -208,7 +212,67 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
 }
 
 /**
- * `lum install` — P3-5 + P3-6, and `--codex` from P5-2.
+ * `daycap config` — what is in force, and where it came from.
+ *
+ * `--edit` hands off to $EDITOR rather than editing anything itself. Writing a config file on the
+ * user's behalf means guessing at values they did not give; opening their editor on their file means
+ * they stay the author. It creates the file with a skeleton first if absent, because an empty buffer
+ * is a worse starting point than a wrong one you can see and change.
+ */
+export async function runConfig(edit: boolean, home: string = homedir()): Promise<number> {
+  const configPath = configPathFor(home);
+  const raw = await readFile(configPath, "utf8").catch(() => null);
+  const { config, warnings } = parseConfigText(raw);
+
+  if (edit) {
+    if (raw === null) {
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(configPath, `${JSON.stringify(SKELETON, null, 2)}\n`, "utf8");
+      process.stdout.write(`Created ${configPath}\n`);
+    }
+    const editor = process.env.VISUAL ?? process.env.EDITOR ?? null;
+    if (editor === null) {
+      // Not an error, and not a guess at which editor they want. Printing the path is useful on its
+      // own, and every shell can open it from there.
+      process.stdout.write(`No $EDITOR or $VISUAL set. The file is at:\n  ${configPath}\n`);
+      return 0;
+    }
+    const { spawnSync } = await import("node:child_process");
+    const r = spawnSync(editor, [configPath], { stdio: "inherit" });
+    return r.status ?? 0;
+  }
+
+  // Which keys the FILE set, as opposed to what parsing produced. This is the whole value of the
+  // command: a misspelled key is invisible in the file and shows as a default here.
+  let explicitKeys: string[] = [];
+  if (raw !== null) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        explicitKeys = Object.keys(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Unparseable: everything is a default, and `warnings` already says why.
+    }
+  }
+
+  process.stdout.write(
+    `${renderConfig({ home, path: configPath, fileExists: raw !== null, config, explicitKeys, warnings }).join("\n")}\n`,
+  );
+  return 0;
+}
+
+/** The starting file `config --edit` writes when none exists. Every key at its documented default. */
+const SKELETON = {
+  dailyBudgetUsd: 0,
+  thresholds: [0.8, 1],
+  notifyEveryUsd: null,
+  notifications: { enabled: false },
+  guard: { enabled: false, denyAt: 1 },
+};
+
+/**
+ * `daycap install` — P3-5 + P3-6, and `--codex` from P5-2.
  *
  * Prints the settings block; `--write` applies it after a backup.
  *
@@ -376,6 +440,8 @@ async function main(argv: readonly string[]): Promise<number> {
         homedir(),
         argv.includes("--codex"),
       );
+    case "config":
+      return await runConfig(argv.includes("--edit"));
     case "doctor":
       return await runDoctor();
   }

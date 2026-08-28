@@ -60,6 +60,14 @@ daycap install --write --codex    # Codex instead (~/.codex/hooks.json) — hook
 
 `--write` never clobbers: it backs up `settings.json` first, and re-running is idempotent.
 
+Inspect what is actually in force — which values you set, which are defaults, and any key `daycap`
+does not read (a typo like `dailyBudgetUSD` is otherwise silent forever):
+
+```bash
+daycap config          # every setting, its value, and where it came from
+daycap config --edit   # open the file in $EDITOR, creating it if absent
+```
+
 Config lives at `~/.daycap/config.json`. Every key is optional; a malformed file still
 renders, and `daycap doctor` prints the reason rather than failing silently.
 
@@ -68,6 +76,7 @@ renders, and `daycap doctor` prints the reason rather than failing silently.
   "dailyBudgetUsd": 20,
   "resetHourLocal": 0,
   "thresholds": [0.8, 1.0],
+  "notifyEveryUsd": 15,
   "source": "auto",
   "notifications": { "enabled": true },
   "guard": { "enabled": false, "denyAt": 1.0, "allowTools": ["Read"] }
@@ -107,6 +116,16 @@ job, a shell one-liner, an export from something nobody has adapted — and `day
 ```
 
 `usd: null` means "activity I could not price". It is not zero and never renders as `$0.00`.
+
+### Notifications
+
+`thresholds` are fractions of your budget — `[0.8, 1.0]` warns at 80% and again at 100%.
+`notifyEveryUsd` adds a fixed dollar drumbeat on top: `15` notifies at $15, $30, $45 and so on.
+
+Each fires **at most once per usage-day**, and a dip below never re-arms it. When several cross in one
+run — the normal first run of a busy day — you get **one** notification, not one per crossing.
+`daycap config` shows how many a full budget implies, so the step size is a considered choice rather
+than a surprise.
 
 ## Tool coverage — read this before assuming
 
