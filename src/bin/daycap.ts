@@ -7,7 +7,7 @@
  * reaching for a collector directly from here.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -28,7 +28,15 @@ import type { ClockPort } from "../domain/ports.ts";
 import { markerDirFor, UNPRICEABLE_TOOLS } from "../domain/surfaces.ts";
 import type { UsageSnapshot } from "../domain/types.ts";
 
-const VERSION = "0.0.0";
+/**
+ * Kept in step with package.json by a test, not by discipline.
+ *
+ * It read "0.0.0" while package.json said "0.1.0" at the moment of the first release, so
+ * `daycap --version` would have lied to every user about which build they had. Bundled output cannot
+ * reliably read package.json at runtime — the relative path differs between a dev checkout and a
+ * global install — so the constant stays, and `test/gates/bin.test.ts` fails if the two disagree.
+ */
+const VERSION = "0.1.0";
 
 /**
  * Measured, not guessed: ~35 ms of process overhead plus a full corpus read — ~90 ms warm and
@@ -376,11 +384,31 @@ async function main(argv: readonly string[]): Promise<number> {
 /**
  * Only run when executed directly. Without this guard, importing the module to test `parseArgs`
  * runs the CLI as a side effect — writing to stderr and setting `process.exitCode` mid-suite.
+ *
+ * COMPARED BY REALPATH, and that is the whole point of this function existing in this shape.
+ *
+ * The first version compared `import.meta.url` to `pathToFileURL(process.argv[1]).href`. That is
+ * correct for `node dist/daycap.js` and WRONG for every global install: `npm i -g` puts a SYMLINK on
+ * PATH, so argv[1] is `/opt/homebrew/bin/daycap` while `import.meta.url` is the resolved
+ * `/opt/homebrew/lib/node_modules/daycap/dist/daycap.js`. The two never match, `main()` never runs,
+ * and the CLI prints nothing and exits 0 — a total failure that reports success.
+ *
+ * It survived every test because the e2e suite runs `node dist/daycap.js` by path, which is the one
+ * invocation that works. It was found by installing the tool and typing `daycap`.
+ *
+ * `realpathSync` collapses the symlink on both sides. It throws if a path has vanished mid-run, so
+ * the fallback is the plain comparison — a wrong answer there means the CLI does not auto-run, which
+ * is the safe direction for a module being imported by a test.
  */
 function isDirectInvocation(): boolean {
   const entry = process.argv[1];
   if (entry === undefined) return false;
-  return import.meta.url === pathToFileURL(entry).href;
+  const self = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(entry) === realpathSync(self);
+  } catch {
+    return pathToFileURL(entry).href === import.meta.url;
+  }
 }
 
 if (isDirectInvocation()) {
@@ -389,7 +417,7 @@ if (isDirectInvocation()) {
       process.exitCode = code;
     },
     (err: unknown) => {
-      process.stderr.write(`lum: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.stderr.write(`${CLI_NAME}: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exitCode = 70; // EX_SOFTWARE
     },
   );

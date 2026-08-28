@@ -1,8 +1,8 @@
 {
   "name": "daycap",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Local budget guardrail for AI coding tools. Consumes a usage collector; owns the budget policy.",
+  "description": "Local budget guardrail for AI coding tools. Reads a usage collector, owns the budget policy, warns and can block before your daily allowance is gone.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -37,5 +37,23 @@
     "tsdown": "^0.15.6",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "llm",
+    "budget",
+    "usage",
+    "cost",
+    "statusline",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hamilton-sky/daycap.git"
+  },
+  "homepage": "https://github.com/hamilton-sky/daycap#readme",
+  "bugs": {
+    "url": "https://github.com/hamilton-sky/daycap/issues"
   }
 }

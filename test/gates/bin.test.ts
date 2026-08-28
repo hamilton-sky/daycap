@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -66,5 +68,39 @@ describe("package.json bin", () => {
     expect(covered, `${relPath} is not in package.json files[]; it would not be published`).toBe(
       true,
     );
+  });
+});
+
+/**
+ * Two things that only break when the tool is INSTALLED, both of which shipped broken.
+ *
+ * The rest of the e2e suite runs `node dist/daycap.js` by path. That is the one invocation a global
+ * install never uses, and both bugs below hid in the gap.
+ */
+describe("gate: the tool works the way users actually install it", () => {
+  it("runs when invoked through a SYMLINK, as `npm i -g` puts it on PATH", () => {
+    // The bug: `npm i -g` symlinks /opt/homebrew/bin/daycap -> .../dist/daycap.js, so argv[1] is the
+    // link and import.meta.url is the target. The old main-module guard compared them directly, so
+    // they never matched, main() never ran, and the CLI printed NOTHING and exited 0. A total
+    // failure that reported success, invisible to every test that invoked the file by its real path.
+    const dir = mkdtempSync(join(tmpdir(), "daycap-symlink-"));
+    try {
+      const link = join(dir, "daycap");
+      symlinkSync(resolve(root, "dist", "daycap.js"), link);
+      const out = execFileSync(process.execPath, [link, "--version"], { encoding: "utf8" });
+      expect(out.trim(), "invoked via symlink, the CLI must actually run").not.toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the same version package.json declares", () => {
+    // It said 0.0.0 while package.json said 0.1.0, so `--version` would have lied about which build
+    // the user had — the single most load-bearing string in a bug report.
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
+    const out = execFileSync(process.execPath, [resolve(root, "dist", "daycap.js"), "--version"], {
+      encoding: "utf8",
+    });
+    expect(out.trim()).toBe(pkg.version);
   });
 });
