@@ -44,6 +44,35 @@ export function fractionOf(signal: Signal): number | null {
   return spent / limit;
 }
 
+/**
+ * The fractions at which $N steps land, for a given budget. PURE.
+ *
+ * `notifyEveryUsd: 15` against a $200 budget yields 0.075, 0.15, 0.225 … — so a dollar milestone
+ * becomes an ordinary threshold and inherits every one of the latch's nine rules instead of getting
+ * a second, less-tested implementation of "fire once per day".
+ *
+ * BOUNDED AT 10x THE BUDGET, deliberately. Spend can exceed the allowance without limit, and an
+ * unbounded generator against a $1 budget and a $500 day would produce 500 thresholds and try to
+ * notify 500 times. `config.ts` already caps a threshold at 10, so this is the same ceiling stated
+ * in the same units, and a run past it stops generating rather than growing without end.
+ *
+ * The first step is `everyUsd`, never 0 — crossing $0 is not news.
+ */
+export function stepFractions(everyUsd: number | null, limitUsd: number | null): Threshold[] {
+  if (everyUsd === null || limitUsd === null) return [];
+  if (!Number.isFinite(everyUsd) || everyUsd <= 0) return [];
+  if (!Number.isFinite(limitUsd) || limitUsd <= 0) return [];
+
+  const out: Threshold[] = [];
+  const maxUsd = limitUsd * 10;
+  for (let usd = everyUsd; usd <= maxUsd; usd += everyUsd) {
+    out.push(usd / limitUsd);
+    // Belt and braces against a pathological `everyUsd` that rounds to no progress.
+    if (out.length >= 1000) break;
+  }
+  return out;
+}
+
 export function evaluate(signal: Signal, config: Pick<Config, "thresholds">): BudgetVerdict {
   const fraction = fractionOf(signal);
   if (fraction === null) return { fraction: null, state: "unknown", crossed: [] };

@@ -134,6 +134,16 @@ export type Config = {
   dailyBudgetUsd: number;
   resetHourLocal: number;
   thresholds: readonly Threshold[];
+  /**
+   * Notify every N dollars of spend, in addition to the fractional `thresholds`.
+   *
+   * `null` is off. Expressed in DOLLARS because that is how the user thinks about it — "tell me
+   * every $15" — and converted to fractions of `dailyBudgetUsd` at evaluation time so the nine
+   * mutation-verified latch rules apply to steps unchanged rather than getting a parallel
+   * implementation. That conversion means steps need a budget: with none set there is no fraction
+   * to compute, and `daycap doctor` says so.
+   */
+  notifyEveryUsd: number | null;
   source: SourceId;
   /**
    * Path to the user's own JSON usage file, or null when they have not set one.

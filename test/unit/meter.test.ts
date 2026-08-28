@@ -10,6 +10,7 @@ const config = (over: Partial<Config> = {}): Config => ({
   dailyBudgetUsd: 10,
   resetHourLocal: 0,
   thresholds: [0.8, 1],
+  notifyEveryUsd: null,
   source: "auto",
   sourceFile: null,
   tools: ["*"],

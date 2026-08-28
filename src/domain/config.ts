@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: Config = {
   dailyBudgetUsd: 0,
   resetHourLocal: 0,
   thresholds: [0.8, 1],
+  notifyEveryUsd: null,
   source: "auto",
   sourceFile: null,
   tools: ["*"],
@@ -97,6 +98,13 @@ export function parseConfig(raw: unknown): ConfigResult {
     warnings.push("thresholds must be an array; using defaults");
   }
 
+  const step = raw.notifyEveryUsd;
+  if (typeof step === "number" && Number.isFinite(step) && step > 0) {
+    cfg.notifyEveryUsd = step;
+  } else if (step !== null && step !== undefined) {
+    warnings.push("notifyEveryUsd must be a number > 0 or null; step notifications off");
+  }
+
   const source = raw.source;
   if (typeof source === "string" && (SOURCE_IDS as readonly string[]).includes(source)) {
     cfg.source = source as SourceId;
@@ -115,6 +123,14 @@ export function parseConfig(raw: unknown): ConfigResult {
   } else if (sourceFile !== null && sourceFile !== undefined) {
     warnings.push(
       "sourceFile must be a non-empty string or null; jsonfile will not be a candidate",
+    );
+  }
+
+  if (cfg.notifyEveryUsd !== null && cfg.dailyBudgetUsd <= 0) {
+    // Steps are fractions of the budget, so without a budget there is nothing to be a fraction of.
+    // Said here rather than discovered as silence at 3am.
+    warnings.push(
+      "notifyEveryUsd is set but dailyBudgetUsd is not; step notifications cannot fire",
     );
   }
 
