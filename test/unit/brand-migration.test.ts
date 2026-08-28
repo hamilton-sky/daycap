@@ -23,6 +23,7 @@ import {
   LEGACY_CLI_NAME,
   LEGACY_STATE_DIR_NAME,
   STATE_DIR_NAME,
+  stateDirName,
 } from "../../src/domain/brand.ts";
 
 let home: string;
@@ -66,5 +67,53 @@ describe("defaultStateDir — the upgrade path", () => {
   it("returns the NEW path on a fresh machine, so nothing is created under the old name", () => {
     // A first-time user must never end up with a `.localusagemeter` directory.
     expect(defaultStateDir(home)).toBe(join(home, STATE_DIR_NAME, "state"));
+  });
+});
+
+/**
+ * The split-brain bug, pinned. Found on a real machine, not by a test.
+ *
+ * `configPathFor` asked "does `~/.daycap/config.json` exist?" and `defaultStateDir` asked "does
+ * `~/.daycap/state` exist?". Different questions, and on a live machine they gave different answers:
+ * a freshly written config in the new directory, no state subdirectory yet, and a leftover
+ * `~/.localusagemeter/state`. Config was read from the new home; the latch was written to the old one.
+ *
+ * Nothing was lost and the tool worked, which is what made it insidious — two directories, no error,
+ * and nothing on any screen said so.
+ */
+describe("stateDirName — one decision, so config and state cannot disagree", () => {
+  it("uses the current directory when it exists", () => {
+    expect(stateDirName(true, false)).toBe(STATE_DIR_NAME);
+  });
+
+  it("uses the legacy directory when only that exists", () => {
+    expect(stateDirName(false, true)).toBe(LEGACY_STATE_DIR_NAME);
+  });
+
+  it("prefers the current one when BOTH exist — this is the bug's exact shape", () => {
+    // A brand-new `.daycap` must not lose to a leftover `.localusagemeter`.
+    expect(stateDirName(true, true)).toBe(STATE_DIR_NAME);
+  });
+
+  it("uses the current directory on a fresh machine", () => {
+    expect(stateDirName(false, false)).toBe(STATE_DIR_NAME);
+  });
+});
+
+describe("the config and the state always agree", () => {
+  it("keys on the DIRECTORY, not on a file inside it", () => {
+    // The subdirectory does not exist until the first write, so asking about `<dir>/state` made the
+    // answer depend on write history rather than on which directory the user is using. This is the
+    // regression: a `.daycap` containing only a config must still win.
+    mkdirSync(join(home, STATE_DIR_NAME), { recursive: true });
+    writeFileSync(join(home, STATE_DIR_NAME, "config.json"), "{}");
+    mkdirSync(join(home, LEGACY_STATE_DIR_NAME, "state"), { recursive: true });
+
+    expect(defaultStateDir(home)).toBe(join(home, STATE_DIR_NAME, "state"));
+  });
+
+  it("still honours a pure legacy install, where only the old directory exists", () => {
+    mkdirSync(join(home, LEGACY_STATE_DIR_NAME, "state"), { recursive: true });
+    expect(defaultStateDir(home)).toBe(join(home, LEGACY_STATE_DIR_NAME, "state"));
   });
 });

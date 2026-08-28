@@ -16,7 +16,7 @@ import { constants, existsSync } from "node:fs";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { LEGACY_STATE_DIR_NAME, STATE_DIR_NAME } from "../../domain/brand.ts";
+import { LEGACY_STATE_DIR_NAME, STATE_DIR_NAME, stateDirName } from "../../domain/brand.ts";
 
 /** The stored bytes are not the value we wrote. Distinct from "absent", which is `null`. */
 export class StoreCorruptError extends Error {
@@ -177,10 +177,16 @@ export class AtomicFileStore {
  * invariant 2 broken by a rename rather than by a bug in the latch.
  */
 export function defaultStateDir(home: string): string {
-  const current = join(home, STATE_DIR_NAME, "state");
-  if (existsSync(current)) return current;
-  const legacy = join(home, LEGACY_STATE_DIR_NAME, "state");
-  return existsSync(legacy) ? legacy : current;
+  // Keyed on the DIRECTORY, not on `<dir>/state` — the subdirectory does not exist until the first
+  // write, so asking about it made a brand-new `.daycap` lose to a leftover `.localusagemeter`.
+  return join(
+    home,
+    stateDirName(
+      existsSync(join(home, STATE_DIR_NAME)),
+      existsSync(join(home, LEGACY_STATE_DIR_NAME)),
+    ),
+    "state",
+  );
 }
 
 export { dirname };

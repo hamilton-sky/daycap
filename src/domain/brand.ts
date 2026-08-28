@@ -39,3 +39,27 @@ export const STATE_DIR_NAME = ".daycap";
 
 /** The pre-rename directory. Read when `STATE_DIR_NAME` does not exist; never written. */
 export const LEGACY_STATE_DIR_NAME = ".localusagemeter";
+
+/**
+ * Which of the two directory names is live, given whether each exists. PURE — the caller does the
+ * `existsSync`, so this stays testable and the domain stays clean.
+ *
+ * WHY THIS IS ONE FUNCTION AND NOT A CHECK PER FILE, learned the hard way:
+ *
+ * The first version decided per file. `configPathFor` preferred `~/.daycap/config.json` when that
+ * FILE existed; `defaultStateDir` preferred `~/.daycap/state` when that DIRECTORY existed. Those are
+ * different questions, and on a real machine they gave different answers — a freshly written
+ * `~/.daycap/config.json` with no `~/.daycap/state` yet, alongside a `~/.localusagemeter/state` left
+ * over from before. Config was read from the new home and the latch was written to the old one.
+ *
+ * Nothing was lost and the tool worked, which is what made it insidious: two directories, no error,
+ * and no way for the user to find out. This project's whole thesis is saying where the number came
+ * from, and it could not say where it kept its own state.
+ *
+ * So the directory is decided ONCE per run and both files follow it. A split is now unrepresentable
+ * rather than merely unlikely.
+ */
+export function stateDirName(hasCurrent: boolean, hasLegacy: boolean): string {
+  if (hasCurrent) return STATE_DIR_NAME;
+  return hasLegacy ? LEGACY_STATE_DIR_NAME : STATE_DIR_NAME;
+}

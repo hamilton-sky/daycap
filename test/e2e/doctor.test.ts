@@ -44,6 +44,7 @@ const facts = (over: Partial<DoctorFacts> = {}): DoctorFacts => ({
   // The common single-candidate world: ccusage present, no sourceFile set. Cases that care about
   // selection override this explicitly, so the default stays the shape most users actually have.
   selection: { chosen: "ccusage", reason: "ccusage (auto)", namedButMissing: false },
+  stateDir: `${HOME}/.daycap/state`,
   probes: [
     { id: "ccusage", configured: true, available: true, where: "/opt/homebrew/bin/ccusage" },
     { id: "jsonfile", configured: false, available: false, where: "sourceFile is not set" },
@@ -347,6 +348,7 @@ describe("daycap doctor — which source, and why (P4-3)", () => {
           { id: "jsonfile", configured: false, available: false, where: "sourceFile is not set" },
         ],
         selection: { chosen: "ccusage", reason: "ccusage (auto)", namedButMissing: false },
+        stateDir: `${HOME}/.daycap/state`,
       }),
     );
     // Two configured candidates is what triggers the block, so with one the block is absent again.

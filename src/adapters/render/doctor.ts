@@ -46,6 +46,14 @@ export type DoctorFacts = {
   selection: { chosen: string | null; reason: string; namedButMissing: boolean };
   /** Every candidate that was probed, in the order `auto` walks them. */
   probes: readonly { id: string; configured: boolean; available: boolean; where: string }[];
+  /**
+   * Where the latch and the cached snapshot actually live.
+   *
+   * Reported because it was once possible for this to differ from the config's directory, and the
+   * user had no way to find out — two directories, no error. Printed only when it is the PRE-RENAME
+   * location, which is the one surprising answer; naming `~/.daycap/state` every run would be noise.
+   */
+  stateDir: string;
 };
 
 const OK = "✓";
@@ -190,6 +198,18 @@ export function renderDoctor(facts: DoctorFacts): { lines: string[]; exitCode: n
         watermark === null
           ? "exposes no freshness watermark of its own"
           : `data as of ${watermark}`,
+      ),
+    );
+  }
+
+  // Only when it is NOT the current name — an upgrading user reading their latch out of the old
+  // directory should be told, and everyone else does not need a line about it.
+  if (!facts.stateDir.includes(".daycap")) {
+    lines.push(
+      row(
+        "state",
+        WARN,
+        `${tildify(facts.stateDir, facts.home)} — pre-rename location, still in use`,
       ),
     );
   }

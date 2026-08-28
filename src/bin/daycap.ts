@@ -23,7 +23,7 @@ import { runAlerts } from "../app/alert.ts";
 import { planCodexInstall, planInstall, renderCodexPlan, renderPlan } from "../app/install.ts";
 import { isLatchState, LATCH_KEY, type LatchState } from "../app/latch.ts";
 import { buildSnapshot, SNAPSHOT_KEY, snapshotAgeSeconds } from "../app/meter.ts";
-import { CLI_NAME, LEGACY_STATE_DIR_NAME, STATE_DIR_NAME } from "../domain/brand.ts";
+import { CLI_NAME, LEGACY_STATE_DIR_NAME, STATE_DIR_NAME, stateDirName } from "../domain/brand.ts";
 import { parseConfigText } from "../domain/config.ts";
 import type { ClockPort } from "../domain/ports.ts";
 import { markerDirFor, UNPRICEABLE_TOOLS } from "../domain/surfaces.ts";
@@ -198,6 +198,7 @@ export async function runDoctor(home: string = homedir()): Promise<number> {
     available: resolved.selection.chosen !== null,
     selection: resolved.selection,
     probes: resolved.probes,
+    stateDir: defaultStateDir(home),
     snapshot,
     snapshotAgeSeconds: snapshot === null ? null : snapshotAgeSeconds(snapshot, Date.now()),
     latch,
@@ -520,8 +521,15 @@ function attemptsFor(resolved: Awaited<ReturnType<typeof resolveSource>>): Docto
  * `lum` users upgrading therefore keep their budget, thresholds and guard settings with no action.
  */
 function configPathFor(home: string): string {
-  const current = join(home, STATE_DIR_NAME, "config.json");
-  if (existsSync(current)) return current;
-  const legacy = join(home, LEGACY_STATE_DIR_NAME, "config.json");
-  return existsSync(legacy) ? legacy : current;
+  // The SAME decision the store makes, so the config and the latch can never disagree about which
+  // directory is live. See `stateDirName` for the split this prevents.
+  return join(home, daycapDirName(home), "config.json");
+}
+
+/** The live directory for this run. One decision, shared by the config and the state. */
+function daycapDirName(home: string): string {
+  return stateDirName(
+    existsSync(join(home, STATE_DIR_NAME)),
+    existsSync(join(home, LEGACY_STATE_DIR_NAME)),
+  );
 }
