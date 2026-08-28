@@ -179,6 +179,35 @@ const strict = perfRequested;
  */
 const HEADROOM_MS = 120;
 
+/**
+ * Layer B's limit, as a CONSTANT used by both the title and the assertion.
+ *
+ * They disagreed. An earlier commit in this series tightened layer B to 20, then reverted it to 30
+ * on real Windows evidence — and edited the title and the comment while leaving `toBeLessThan(20)`
+ * in place. So the test announced "< 30ms", enforced 20ms, and flaked on Windows at 26.3ms exactly
+ * as the reverted-away-from value was predicted to. A title that contradicts its assertion is worse
+ * than either number alone, because the failure message argues against the test's own name.
+ *
+ * 30 is evidence-based: 1.7x the worst real Windows median-of-pairs observed (17.5ms), and now also
+ * clear of the 26.3ms seen on a runner whose bare interpreter boot hit 920ms.
+ */
+const LAYER_B_LIMIT_MS = 30;
+
+/**
+ * Above this, the baseline itself says the machine cannot time anything.
+ *
+ * A tail assertion needs a usable measurement, and `bare node -e ""` is the honest read on whether
+ * one exists: it is normally ~25ms, and a run that reports 920ms is not a slow program, it is a
+ * machine with nothing left to give. Asserting a tail on that data produces a red build that says
+ * only "the runner was busy" — which is precisely the failure mode this whole series of commits
+ * exists to remove, arriving one level up.
+ *
+ * 250ms is ~10x the observed idle baseline and ~3x the worst HEALTHY runner reading (77.9ms). Past
+ * it, layer C reports and declines to assert; layer B still asserts, because a median of interleaved
+ * pairs is robust to exactly this and stayed at 26.3ms while the p95 delta read 919ms.
+ */
+const BASELINE_SANITY_MS = 250;
+
 spawny("P3-4 layers B, C and D — spawn cost", () => {
   // 30, not 60: this spawns 2x this many processes and a shared CI runner is slow. p95 over 30
   // samples is still a p95; the first version budgeted no wall-clock for the measurement itself
@@ -252,7 +281,7 @@ spawny("P3-4 layers B, C and D — spawn cost", () => {
     spawns = { bare, script, pairs };
   }, BUDGET_MS);
 
-  it("layer B — marginal cost over a bare node boot is < 30ms", () => {
+  it(`layer B — marginal cost over a bare node boot is < ${LAYER_B_LIMIT_MS}ms`, () => {
     const marginal = median(spawns.pairs);
     const sorted = [...spawns.pairs].sort((a, b) => a - b);
     // 30, and it STAYS 30. This was tightened to 20 in an earlier draft of this commit, on the
@@ -273,7 +302,7 @@ spawny("P3-4 layers B, C and D — spawn cost", () => {
       marginal,
       `median ${marginal.toFixed(1)}ms over ${runs} interleaved pairs ` +
         `(min ${(sorted[0] ?? 0).toFixed(1)}ms, max ${(sorted[sorted.length - 1] ?? 0).toFixed(1)}ms)`,
-    ).toBeLessThan(20);
+    ).toBeLessThan(LAYER_B_LIMIT_MS);
   });
 
   /**
@@ -304,6 +333,23 @@ spawny("P3-4 layers B, C and D — spawn cost", () => {
   it("layer C — absolute wall clock stays within this machine's boot plus headroom", () => {
     const bare = p95(spawns.bare);
     const actual = p95(spawns.script);
+
+    // MEASUREMENT VALIDITY FIRST. Calibrating against the baseline fixed the common case, and then a
+    // Windows runner reported a bare boot of 920ms — 38x idle — and the calibrated ceiling failed
+    // too, because at that point BOTH p95s are draws from a distribution the scheduler owns. The
+    // paired median on the same run read 26.3ms, i.e. our code was fine and the tail number was
+    // noise. Declining to assert is the correct response to invalid data; asserting anyway is how a
+    // suite teaches people to ignore it.
+    if (bare > BASELINE_SANITY_MS) {
+      console.log(
+        `[layer C] SKIPPED — baseline p95 ${bare.toFixed(1)}ms exceeds ${BASELINE_SANITY_MS}ms, so ` +
+          `this machine cannot time a tail. Our own cost is still guarded by layer B ` +
+          `(median pair ${median(spawns.pairs).toFixed(1)}ms).`,
+      );
+      expect(median(spawns.pairs)).toBeLessThan(LAYER_B_LIMIT_MS);
+      return;
+    }
+
     const ceiling = bare + HEADROOM_MS;
     expect(
       actual,
